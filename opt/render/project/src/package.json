@@ -3,8 +3,8 @@
 	"version": "10.0.1",
 	"description": "Get metadata of a package from the npm registry",
 	"license": "MIT",
-	"repository": "https://xpmuser.github.io/opt/render/project/src/package-json",
-	"funding": "https://github.com/XPMUser/XPMUser.github.io",
+	"repository": "https://toonigy.github.io/prodidows-server/opt/render/project/src/package-json",
+	"funding": "https://github.com/Toonigy/toonigy.github.io",
 	"author": {
 		"name": "XPMUser",
 		"email": "learnandfunwithsc@gmail.com",
