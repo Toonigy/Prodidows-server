@@ -1,13 +1,16 @@
 const WebSocket = require('ws');
-const http = require('http');
+const https = require('https');
+const fs = require('fs');
 
-// Create the HTTP server
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('WebSocket server running...');
+// Create the HTTPS server
+const server = https.createServer({
+  // Render handles SSL certificates automatically, so no need to set your own certs
+  // You can omit these if you're using Render's default HTTPS support
+  // cert: fs.readFileSync('path_to_cert.pem'),
+  // key: fs.readFileSync('path_to_key.pem')
 });
 
-// Create the WebSocket server using the existing HTTP server
+// Create the WebSocket server using the existing HTTPS server
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (socket) => {
@@ -31,7 +34,7 @@ wss.on('connection', (socket) => {
     socket.send('Welcome to the WebSocket server!');
 });
 
-// Only call listen() once
+// Listen on the port provided by Render's environment variables (e.g., 10000 or `process.env.PORT`)
 server.listen(process.env.PORT || 8080, () => {
     console.log(`WebSocket server is up and running on port ${process.env.PORT || 8080}`);
 });
