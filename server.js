@@ -1,21 +1,21 @@
 const WebSocket = require('ws');
 const http = require('http');
 
-// Create an HTTP server to support WebSocket connections
-const server = http.createServer();
-const wss = new WebSocket.Server({ server });
-
-server.listen(process.env.PORT || 8080, () => {
-    console.log(`Server running on port ${process.env.PORT || 8080}`);
+// Create the HTTP server
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('WebSocket server running...');
 });
 
-// Handle WebSocket connections
+// Create the WebSocket server using the existing HTTP server
+const wss = new WebSocket.Server({ server });
+
 wss.on('connection', (socket) => {
     console.log('A client connected.');
 
     socket.on('message', (message) => {
         console.log(`Received: ${message}`);
-        
+
         // Broadcast the message to all connected clients
         wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
@@ -31,8 +31,7 @@ wss.on('connection', (socket) => {
     socket.send('Welcome to the WebSocket server!');
 });
 
-// Start the HTTP server
+// Only call listen() once
 server.listen(process.env.PORT || 8080, () => {
-    console.log('WebSocket server is up and running!');
+    console.log(`WebSocket server is up and running on port ${process.env.PORT || 8080}`);
 });
-
