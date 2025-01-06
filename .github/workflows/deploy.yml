@@ -28,10 +28,9 @@ jobs:
       - name: Run tests
         run: npm test  # Skip this step if you don't have tests
 
-      # Deploy to Render (optional if you're handling it outside GitHub Actions)
+      # Deploy to Render
       - name: Deploy to Render
         run: |
           curl -X POST https://api.render.com/deploy/sync \
           -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-          -d '{"serviceId": "your-service-id"}'
-
+          -d '{"serviceId": "${{ secrets.RENDER_SERVICE_ID }}"}'
