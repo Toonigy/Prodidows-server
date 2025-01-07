@@ -3,19 +3,35 @@ name: Deploy to Render
 on:
   push:
     branches:
-      - main
+      - main  # Trigger on pushes to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: Install Render CLI
       - name: Install Render CLI
-        run: curl -fsSL https://render.com/download/render-cli | bash
+        run: |
+          curl -fsSL https://render.com/download/render-cli | bash
+          render --version  # Verify if Render CLI was installed successfully
 
+      # Step 3: Debug - Check if RENDER_API_KEY is set
+      - name: Check RENDER_API_KEY environment variable
+        run: echo ${{ secrets.RENDER_API_KEY }} # This should print the API key to ensure it's correctly set
+
+      # Step 4: Deploy to Render
       - name: Deploy to Render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        run: render deploy --service-id <rnd_IWYXUM64yarOXcFnNDTupcAbKpFA>
+        run: |
+          echo "Deploying to Render using service ID"
+          render deploy --service-id <YOUR_SERVICE_ID>  # Replace with your actual Render Service ID
+
+      # Step 5: Check deployment status
+      - name: Verify Deployment Status
+        run: |
+          render status --service-id <rnd_IWYXUM64yarOXcFnNDTupcAbKpFA>  # Check the status of the service after deployment
