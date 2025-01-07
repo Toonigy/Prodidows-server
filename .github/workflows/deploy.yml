@@ -14,16 +14,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Install Render CLI
+      # Step 2: Install Node.js and Render CLI using npm
       - name: Install Render CLI
         run: |
-          curl -fsSL https://render.com/download/render-cli | bash
-          render --version  # Check if the Render CLI was installed successfully
+          curl -sL https://deb.nodesource.com/setup_16.x | bash -  # Install Node.js
+          apt-get install -y nodejs
+          npm install -g @render/render-cli  # Install Render CLI globally
+          render --version  # Verify if Render CLI was installed successfully
 
-      # Step 3: Debug - Check RENDER_API_KEY environment variable
-      - name: Check RENDER_API_KEY
+      # Step 3: Check if RENDER_API_KEY is passed correctly
+      - name: Check RENDER_API_KEY environment variable
         run: |
-          echo "Rendering API Key: ${{ secrets.RENDER_API_KEY }}"  # Will print a masked version
+          echo "Rendering API Key: ${{ secrets.RENDER_API_KEY }}"  # This will print a masked version
 
       # Step 4: Deploy to Render
       - name: Deploy to Render
