@@ -17,8 +17,11 @@ jobs:
       # Step 2: Install Render CLI (via GitHub Releases)
       - name: Install Render CLI
         run: |
-          # Download the latest Render CLI release from GitHub
-          curl -sSL https://github.com/renderinc/render-cli/releases/latest/download/render-cli-linux-amd64.tar.gz -o render-cli.tar.gz
+          # Download the latest Render CLI release from GitHub (Linux version)
+          curl -sSL https://github.com/renderinc/render-cli/releases/download/v0.2.6/render-cli-linux-amd64.tar.gz -o render-cli.tar.gz
+
+          # Check if the file is a valid tar.gz file
+          file render-cli.tar.gz
 
           # Extract the downloaded tarball
           tar -xvzf render-cli.tar.gz
