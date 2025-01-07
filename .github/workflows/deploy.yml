@@ -3,34 +3,21 @@ name: Deploy to Render
 on:
   push:
     branches:
-      - main  # Trigger the workflow on pushes to the `main` branch
+      - main  # Trigger deployment on pushes to the main branch
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Use the latest Ubuntu runner
-
+    runs-on: ubuntu-latest
     steps:
-      # Checkout the code from GitHub
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # Set up Node.js (specify version based on your requirements)
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'  # You can change this to your preferred version
-
-      # Install dependencies
-      - name: Install dependencies
-        run: npm install
-
-      # Run tests (optional)
-      - name: Run tests
-        run: npm test  # Skip this step if you don't have tests
-
-      # Deploy to Render
-      - name: Deploy to Render
+      - name: Set up Render CLI
         run: |
-          curl -X POST https://api.render.com/deploy/sync \
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-          -d '{"serviceId": "${{ secrets.RENDER_SERVICE_ID }}"}'
+          curl -fsSL https://render.com/download/render-cli | bash
+
+      - name: Deploy to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          render deploy --service-id <rnd_IWYXUM64yarOXcFnNDTupcAbKpFA>
