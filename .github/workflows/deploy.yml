@@ -14,12 +14,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Install Render CLI
+      # Step 2: Install Render CLI (via GitHub Releases)
       - name: Install Render CLI
         run: |
-          # Download and install Render CLI
-          curl -sSL https://render.com/download/render-cli | bash
-          # Make sure render command is available
+          # Download the latest Render CLI release from GitHub
+          curl -sSL https://github.com/renderinc/render-cli/releases/latest/download/render-cli-linux-amd64.tar.gz -o render-cli.tar.gz
+
+          # Extract the downloaded tarball
+          tar -xvzf render-cli.tar.gz
+
+          # Move the render CLI binary to /usr/local/bin for global access
+          sudo mv render-cli /usr/local/bin/
+
+          # Verify Render CLI installation
           render --version
 
       # Step 3: Check if RENDER_API_KEY is passed correctly
