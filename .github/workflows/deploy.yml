@@ -3,7 +3,7 @@ name: Deploy to Render
 on:
   push:
     branches:
-      - main  # Trigger deployment on pushes to the main branch
+      - main
 
 jobs:
   deploy:
@@ -12,12 +12,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Render CLI
-        run: |
-          curl -fsSL https://render.com/download/render-cli | bash
+      - name: Install Render CLI
+        run: curl -fsSL https://render.com/download/render-cli | bash
 
       - name: Deploy to Render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        run: |
-          render deploy --service-id <rnd_IWYXUM64yarOXcFnNDTupcAbKpFA>
+        run: render deploy --service-id <rnd_IWYXUM64yarOXcFnNDTupcAbKpFA>
