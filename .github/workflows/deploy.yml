@@ -14,13 +14,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Install Node.js and Render CLI using npm
-      - name: Install Render CLI
+      # Step 2: Install Node.js (latest LTS version) and Render CLI
+      - name: Install Node.js and Render CLI
         run: |
-          curl -sL https://deb.nodesource.com/setup_16.x | bash -  # Install Node.js
-          apt-get install -y nodejs
-          npm install -g @render/render-cli  # Install Render CLI globally
-          render --version  # Verify if Render CLI was installed successfully
+          # Install Node.js 20.x LTS (recommended)
+          curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+          # Install Render CLI globally
+          npm install -g @render/render-cli
+
+          # Verify Render CLI installation
+          render --version
 
       # Step 3: Check if RENDER_API_KEY is passed correctly
       - name: Check RENDER_API_KEY environment variable
