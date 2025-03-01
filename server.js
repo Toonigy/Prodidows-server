@@ -12,7 +12,12 @@ app.use(express.static("public"));
 // Middleware to parse JSON requests
 app.use(express.json());
 
-// Sample world list to start with
+// Route for the root URL
+app.get("/", (req, res) => {
+    res.send("Server is running on Render!");
+});
+
+// Initialize the world list
 let worlds = [
     {
         "id": 1,
@@ -32,27 +37,31 @@ let worlds = [
     }
 ];
 
-// Route for the root URL
-app.get("/", (req, res) => {
-    res.send("Server is running on Render!");
-});
-
-// Route to get the world list
+// Handle GET request to retrieve the world list
 app.get("/worlds-api/world-list", (req, res) => {
-    res.json(worlds); // Return the world list as JSON
+    res.json(worlds);
 });
 
-// Route to post a new world to the list
+// Handle POST request to add a new world to the list
 app.post("/worlds-api/world-list", (req, res) => {
     const newWorld = req.body;
-    if (!newWorld || !newWorld.name || !newWorld.id || !newWorld.full || !newWorld.meta) {
-        return res.status(400).json({ error: "Missing required fields" });
+
+    // Log the request body for debugging
+    console.log('Received request body:', newWorld);
+
+    // Check if the required fields are present
+    if (!newWorld || !newWorld.id || !newWorld.full || !newWorld.name || !newWorld.meta) {
+        return res.status(400).json({ error: "Missing required fields: id, full, name, or meta" });
     }
+
+    // Add the new world to the list
     worlds.push(newWorld);
+
+    // Respond with a success message
     res.json({ message: "World added successfully", world: newWorld });
 });
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port} or https://prodidows-server.onrender.com`);
+    console.log(`Server running at http://localhost:${port} or Render`);
 });
