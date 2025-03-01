@@ -35,5 +35,5 @@ app.post("/world-list", (req, res) => {
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port} or Render`);
+    console.log(`Server running at http://localhost:${port} or https://your-render-app-name.onrender.com`);
 });
