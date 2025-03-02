@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000; // Use Render's port
 
 // Enable CORS for a specific frontend (Replace with your actual frontend URL)
 const corsOptions = {
-    origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com"],
+    origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io"],
     methods: "GET, POST, OPTIONS",
     allowedHeaders: "Content-Type, Authorization"
 };
