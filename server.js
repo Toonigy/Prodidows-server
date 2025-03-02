@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const http = require("http"); // Import http module to create a server
+const socketIo = require("socket.io"); // Import Socket.IO
 const app = express();
 const port = process.env.PORT || 3000; // Use Render's port
 
@@ -19,6 +21,10 @@ app.use(express.static("public"));
 
 // Handle preflight requests
 app.options("*", cors(corsOptions));
+
+// Create HTTP server and attach Socket.IO to it
+const server = http.createServer(app);
+const io = socketIo(server); // Initialize Socket.IO with the server
 
 // Route for the root URL
 app.get("/", (req, res) => {
@@ -68,7 +74,44 @@ app.post("/worlds-api/world-list", (req, res) => {
     res.json({ message: "World added successfully", world: newWorld });
 });
 
+// Multiplayer functionality using Socket.IO
+io.on("connection", (socket) => {
+    console.log("A user connected:", socket.id);
+
+    // Handle a player joining a world
+    socket.on("joinWorld", (worldId) => {
+        console.log(`Player ${socket.id} joined world ${worldId}`);
+
+        // Broadcast to all clients that the player joined
+        io.emit("playerJoined", {
+            playerId: socket.id,
+            worldId: worldId
+        });
+    });
+
+    // Handle player actions or movements in the world
+    socket.on("playerAction", (actionData) => {
+        console.log(`Player ${socket.id} performed action:`, actionData);
+
+        // Broadcast the player's action to other players
+        io.emit("playerAction", {
+            playerId: socket.id,
+            action: actionData
+        });
+    });
+
+    // Handle player disconnection
+    socket.on("disconnect", () => {
+        console.log("Player disconnected:", socket.id);
+
+        // Notify other players when someone disconnects
+        io.emit("playerDisconnected", {
+            playerId: socket.id
+        });
+    });
+});
+
 // Start the server
-app.listen(port, () => {
+server.listen(port, () => {
     console.log(`Server running at http://localhost:${port} or Render`);
 });
