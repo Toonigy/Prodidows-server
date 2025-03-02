@@ -1,1 +1,1781 @@
-[{"name":"Fireplane","path":"/worlds/fireplane","icon":"fire","full":0}]
+[
+  {
+    "id": 1,
+    "full": 76,
+    "name": "Fireplane",
+    "meta": {
+      "tag": "fire"
+    }
+  },
+  {
+    "id": 2,
+    "full": 6,
+    "name": "Waterscape",
+    "meta": {
+      "tag": "water"
+    }
+  },
+  {
+    "id": 3,
+    "full": 7,
+    "name": "Earthshire",
+    "meta": {
+      "tag": "earth"
+    }
+  },
+  {
+    "id": 4,
+    "full": 80,
+    "name": "Airmeld",
+    "meta": {
+      "tag": "air"
+    }
+  },
+  {
+    "id": 5,
+    "full": 5,
+    "name": "Icefields",
+    "meta": {
+      "tag": "ice"
+    }
+  },
+  {
+    "id": 6,
+    "full": 60,
+    "name": "Astrallum",
+    "meta": {
+      "tag": "wizard"
+    }
+  },
+  {
+    "id": 7,
+    "full": 25,
+    "name": "Cumulite",
+    "meta": {
+      "tag": "zone-air"
+    }
+  },
+  {
+    "id": 8,
+    "full": 5,
+    "name": "Grassy Plains",
+    "meta": {
+      "tag": "zone-earth"
+    }
+  },
+  {
+    "id": 9,
+    "full": 8,
+    "name": "Emberland",
+    "meta": {
+      "tag": "zone-fire"
+    }
+  },
+  {
+    "id": 10,
+    "full": 75,
+    "name": "Coldshard",
+    "meta": {
+      "tag": "zone-ice"
+    }
+  },
+  {
+    "id": 11,
+    "full": 6,
+    "name": "Riverdeep",
+    "meta": {
+      "tag": "zone-water"
+    }
+  },
+  {
+    "id": 12,
+    "full": 99,
+    "name": "Animalia",
+    "meta": {
+      "tag": "pet"
+    }
+  },
+  {
+    "id": 13,
+    "full": 78,
+    "name": "Prodigy",
+    "meta": {
+      "tag": "trophyGold"
+    }
+  },
+  {
+    "id": 14,
+    "full": 4,
+    "name": "Silverdome",
+    "meta": {
+      "tag": "trophySilver"
+    }
+  },
+  {
+    "id": 15,
+    "full": 5,
+    "name": "Culldeep",
+    "meta": {
+      "tag": "trophyBronze"
+    }
+  },
+  {
+    "id": 16,
+    "full": 7,
+    "name": "Travellog",
+    "meta": {
+      "tag": "map"
+    }
+  },
+  {
+    "id": 17,
+    "full": 4,
+    "name": "Illustrus",
+    "meta": {
+      "tag": "leaderboard"
+    }
+  },
+  {
+    "id": 18,
+    "full": 43,
+    "name": "Estrial",
+    "meta": {
+      "tag": "boss"
+    }
+  },
+  {
+    "id": 19,
+    "full": 57,
+    "name": "Champion",
+    "meta": {
+      "tag": "award"
+    }
+  },
+  {
+    "id": 20,
+    "full": 3,
+    "name": "Escholus",
+    "meta": {
+      "tag": "book"
+    }
+  },
+  {
+    "id": 21,
+    "full": 3,
+    "name": "Presentia",
+    "meta": {
+      "tag": "gift"
+    }
+  },
+  {
+    "id": 22,
+    "full": 38,
+    "name": "Dragonfire",
+    "meta": {
+      "type": "pet",
+      "ID": 8
+    }
+  },
+  {
+    "id": 23,
+    "full": 12,
+    "name": "Unikind",
+    "meta": {
+      "type": "pet",
+      "ID": 35
+    }
+  },
+  {
+    "id": 24,
+    "full": 3,
+    "name": "Skyfall",
+    "meta": {
+      "type": "pet",
+      "ID": 56
+    }
+  },
+  {
+    "id": 25,
+    "full": 5,
+    "name": "Flamespace",
+    "meta": {
+      "type": "pet",
+      "ID": 63
+    }
+  },
+  {
+    "id": 26,
+    "full": 4,
+    "name": "Faerealm",
+    "meta": {
+      "type": "pet",
+      "ID": 61
+    }
+  },
+  {
+    "id": 27,
+    "full": 3,
+    "name": "Snowbaul",
+    "meta": {
+      "type": "pet",
+      "ID": 87
+    }
+  },
+  {
+    "id": 28,
+    "full": 4,
+    "name": "Treasureland",
+    "meta": {
+      "type": "pet",
+      "ID": 98
+    }
+  },
+  {
+    "id": 29,
+    "full": 4,
+    "name": "Robobit",
+    "meta": {
+      "type": "pet",
+      "ID": 113
+    }
+  },
+  {
+    "id": 30,
+    "full": 43,
+    "name": "Dynocore",
+    "meta": {
+      "type": "pet",
+      "ID": 111
+    }
+  },
+  {
+    "id": 31,
+    "full": 3,
+    "name": "Royalway",
+    "meta": {
+      "type": "pet",
+      "ID": 53
+    }
+  },
+  {
+    "id": 32,
+    "full": 40,
+    "name": "Flexor",
+    "meta": {
+      "type": "pet",
+      "ID": 47
+    }
+  },
+  {
+    "id": 33,
+    "full": 3,
+    "name": "Phoenick",
+    "meta": {
+      "type": "pet",
+      "ID": 48
+    }
+  },
+  {
+    "id": 34,
+    "full": 16,
+    "name": "Lunaris",
+    "meta": {
+      "type": "pet",
+      "ID": 20
+    }
+  },
+  {
+    "id": 35,
+    "full": 43,
+    "name": "Birdcage",
+    "meta": {
+      "type": "pet",
+      "ID": 4
+    }
+  },
+  {
+    "id": 36,
+    "full": 4,
+    "name": "Oceanus",
+    "meta": {
+      "type": "pet",
+      "ID": 101
+    }
+  },
+  {
+    "id": 37,
+    "full": 8,
+    "name": "Granite",
+    "meta": {
+      "type": "pet",
+      "ID": 80
+    }
+  },
+  {
+    "id": 38,
+    "full": 4,
+    "name": "Prehistoria",
+    "meta": {
+      "type": "pet",
+      "ID": 107
+    }
+  },
+  {
+    "id": 39,
+    "full": 5,
+    "name": "Squeekore",
+    "meta": {
+      "type": "pet",
+      "ID": 1
+    }
+  },
+  {
+    "id": 40,
+    "full": 2,
+    "name": "Leftfield",
+    "meta": {
+      "type": "pet",
+      "ID": 30
+    }
+  },
+  {
+    "id": 41,
+    "full": 6,
+    "name": "Furnace",
+    "meta": {
+      "type": "pet",
+      "ID": 34
+    }
+  },
+  {
+    "id": 42,
+    "full": 4,
+    "name": "Ghosttown",
+    "meta": {
+      "type": "pet",
+      "ID": 90
+    }
+  },
+  {
+    "id": 43,
+    "full": 56,
+    "name": "Amphibia",
+    "meta": {
+      "type": "pet",
+      "ID": 94
+    }
+  },
+  {
+    "id": 44,
+    "full": 45,
+    "name": "Cloudheart",
+    "meta": {
+      "type": "pet",
+      "ID": 3
+    }
+  },
+  {
+    "id": 45,
+    "full": 4,
+    "name": "Dracochus",
+    "meta": {
+      "type": "pet",
+      "ID": 7
+    }
+  },
+  {
+    "id": 46,
+    "full": 5,
+    "name": "The Hive",
+    "meta": {
+      "type": "pet",
+      "ID": 25
+    }
+  },
+  {
+    "id": 47,
+    "full": 5,
+    "name": "Heatwave",
+    "meta": {
+      "type": "pet",
+      "ID": 28
+    }
+  },
+  {
+    "id": 48,
+    "full": 4,
+    "name": "Razorfire",
+    "meta": {
+      "type": "pet",
+      "ID": 29
+    }
+  },
+  {
+    "id": 49,
+    "full": 3,
+    "name": "Gaia",
+    "meta": {
+      "type": "pet",
+      "ID": 32
+    }
+  },
+  {
+    "id": 50,
+    "full": 77,
+    "name": "Landlion",
+    "meta": {
+      "type": "pet",
+      "ID": 39
+    }
+  },
+  {
+    "id": 51,
+    "full": 5,
+    "name": "Slitherus",
+    "meta": {
+      "type": "pet",
+      "ID": 43
+    }
+  },
+  {
+    "id": 52,
+    "full": 66,
+    "name": "Wolfbreath",
+    "meta": {
+      "type": "pet",
+      "ID": 50
+    }
+  },
+  {
+    "id": 53,
+    "full": 5,
+    "name": "Grumpus",
+    "meta": {
+      "type": "pet",
+      "ID": 60
+    }
+  },
+  {
+    "id": 54,
+    "full": 5,
+    "name": "Garmlia",
+    "meta": {
+      "type": "pet",
+      "ID": 82
+    }
+  },
+  {
+    "id": 55,
+    "full": 4,
+    "name": "Shnowbahl",
+    "meta": {
+      "type": "pet",
+      "ID": 87
+    }
+  },
+  {
+    "id": 56,
+    "full": 54,
+    "name": "Frozone",
+    "meta": {
+      "type": "pet",
+      "ID": 88
+    }
+  },
+  {
+    "id": 57,
+    "full": 2,
+    "name": "Sealing",
+    "meta": {
+      "type": "pet",
+      "ID": 99
+    }
+  },
+  {
+    "id": 58,
+    "full": 6,
+    "name": "Deepsea",
+    "meta": {
+      "type": "pet",
+      "ID": 102
+    }
+  },
+  {
+    "id": 59,
+    "full": 9,
+    "name": "Cavernous",
+    "meta": {
+      "type": "pet",
+      "ID": 104
+    }
+  },
+  {
+    "id": 60,
+    "full": 3,
+    "name": "Sprocket",
+    "meta": {
+      "type": "pet",
+      "ID": 119
+    }
+  },
+  {
+    "id": 61,
+    "full": 55,
+    "name": "Arachnia",
+    "meta": {
+      "type": "pet",
+      "ID": 121
+    }
+  },
+  {
+    "id": 62,
+    "full": 3,
+    "name": "Skywing",
+    "meta": {
+      "type": "item",
+      "ID": 7
+    }
+  },
+  {
+    "id": 63,
+    "full": 25,
+    "name": "Diamondmine",
+    "meta": {
+      "type": "item",
+      "ID": 28
+    }
+  },
+  {
+    "id": 64,
+    "full": 6,
+    "name": "Frostwick",
+    "meta": {
+      "type": "item",
+      "ID": 27
+    }
+  },
+  {
+    "id": 65,
+    "full": 5,
+    "name": "Gemcraft",
+    "meta": {
+      "type": "item",
+      "ID": 20
+    }
+  },
+  {
+    "id": 66,
+    "full": 4,
+    "name": "Goldmire",
+    "meta": {
+      "type": "item",
+      "ID": 26
+    }
+  },
+  {
+    "id": 67,
+    "full": 7,
+    "name": "Solarus",
+    "meta": {
+      "type": "item",
+      "ID": 35
+    }
+  },
+  {
+    "id": 68,
+    "full": 7,
+    "name": "Cloudcall",
+    "meta": {
+      "type": "item",
+      "ID": 46
+    }
+  },
+  {
+    "id": 69,
+    "full": 5,
+    "name": "Farmland",
+    "meta": {
+      "type": "item",
+      "ID": 44
+    }
+  },
+  {
+    "id": 70,
+    "full": 8,
+    "name": "Doubloon",
+    "meta": {
+      "type": "item",
+      "ID": 55
+    }
+  },
+  {
+    "id": 71,
+    "full": 8,
+    "name": "Hatchery",
+    "meta": {
+      "type": "item",
+      "ID": 64
+    }
+  },
+  {
+    "id": 72,
+    "full": 4,
+    "name": "Plank",
+    "meta": {
+      "type": "item",
+      "ID": 51
+    }
+  },
+  {
+    "id": 73,
+    "full": 4,
+    "name": "Gearshop",
+    "meta": {
+      "type": "item",
+      "ID": 47
+    }
+  },
+  {
+    "id": 74,
+    "full": 4,
+    "name": "Mechanico",
+    "meta": {
+      "type": "item",
+      "ID": 53
+    }
+  },
+  {
+    "id": 75,
+    "full": 6,
+    "name": "Mandora",
+    "meta": {
+      "type": "item",
+      "ID": 24
+    }
+  },
+  {
+    "id": 76,
+    "full": 11,
+    "name": "Dracogem",
+    "meta": {
+      "type": "item",
+      "ID": 36
+    }
+  },
+  {
+    "id": 77,
+    "full": 15,
+    "name": "Borderland",
+    "meta": {
+      "type": "item",
+      "ID": 56
+    }
+  },
+  {
+    "id": 78,
+    "full": 6,
+    "name": "Voyatet",
+    "meta": {
+      "type": "item",
+      "ID": 57
+    }
+  },
+  {
+    "id": 79,
+    "full": 4,
+    "name": "Keystone",
+    "meta": {
+      "type": "item",
+      "ID": 59
+    }
+  },
+  {
+    "id": 80,
+    "full": 6,
+    "name": "Twilight",
+    "meta": {
+      "type": "item",
+      "ID": 30
+    }
+  },
+  {
+    "id": 81,
+    "full": 12,
+    "name": "Emerald",
+    "meta": {
+      "type": "item",
+      "ID": 21
+    }
+  },
+  {
+    "id": 82,
+    "full": 3,
+    "name": "Sapphire",
+    "meta": {
+      "type": "item",
+      "ID": 28
+    }
+  },
+  {
+    "id": 83,
+    "full": 9,
+    "name": "Ruby",
+    "meta": {
+      "type": "item",
+      "ID": 34
+    }
+  },
+  {
+    "id": 84,
+    "full": 5,
+    "name": "The Freezer",
+    "meta": {
+      "type": "item",
+      "ID": 32
+    }
+  },
+  {
+    "id": 85,
+    "full": 5,
+    "name": "Memoria",
+    "meta": {
+      "type": "item",
+      "ID": 31
+    }
+  },
+  {
+    "id": 86,
+    "full": 50,
+    "name": "Beachfront",
+    "meta": {
+      "type": "item",
+      "ID": 42
+    }
+  },
+  {
+    "id": 87,
+    "full": 3,
+    "name": "Monsteye",
+    "meta": {
+      "type": "item",
+      "ID": 48
+    }
+  },
+  {
+    "id": 88,
+    "full": 6,
+    "name": "Pyrestone",
+    "meta": {
+      "type": "item",
+      "ID": 71
+    }
+  },
+  {
+    "id": 89,
+    "full": 5,
+    "name": "Orchestret",
+    "meta": {
+      "type": "item",
+      "ID": 70
+    }
+  },
+  {
+    "id": 90,
+    "full": 3,
+    "name": "Salabrex",
+    "meta": {
+      "type": "item",
+      "ID": 76
+    }
+  },
+  {
+    "id": 91,
+    "full": 4,
+    "name": "Embervine",
+    "meta": {
+      "type": "item",
+      "ID": 33
+    }
+  },
+  {
+    "id": 92,
+    "full": 6,
+    "name": "Enchantric",
+    "meta": {
+      "type": "weapon",
+      "ID": 1
+    }
+  },
+  {
+    "id": 93,
+    "full": 4,
+    "name": "Spellbound",
+    "meta": {
+      "type": "weapon",
+      "ID": 4
+    }
+  },
+  {
+    "id": 94,
+    "full": 4,
+    "name": "Starlight",
+    "meta": {
+      "type": "weapon",
+      "ID": 2
+    }
+  },
+  {
+    "id": 95,
+    "full": 3,
+    "name": "Reptilia",
+    "meta": {
+      "type": "weapon",
+      "ID": 6
+    }
+  },
+  {
+    "id": 96,
+    "full": 4,
+    "name": "Moonsight",
+    "meta": {
+      "type": "weapon",
+      "ID": 7
+    }
+  },
+  {
+    "id": 97,
+    "full": 3,
+    "name": "The Pale",
+    "meta": {
+      "type": "weapon",
+      "ID": 16
+    }
+  },
+  {
+    "id": 98,
+    "full": 5,
+    "name": "Flowerseed",
+    "meta": {
+      "type": "weapon",
+      "ID": 15
+    }
+  },
+  {
+    "id": 99,
+    "full": 4,
+    "name": "Vinewood",
+    "meta": {
+      "type": "weapon",
+      "ID": 24
+    }
+  },
+  {
+    "id": 100,
+    "full": 3,
+    "name": "Treebark",
+    "meta": {
+      "type": "weapon",
+      "ID": 36
+    }
+  },
+  {
+    "id": 101,
+    "full": 9,
+    "name": "Felspore",
+    "meta": {
+      "type": "weapon",
+      "ID": 54
+    }
+  },
+  {
+    "id": 102,
+    "full": 3,
+    "name": "Pirate Bay",
+    "meta": {
+      "type": "weapon",
+      "ID": 65
+    }
+  },
+  {
+    "id": 103,
+    "full": 6,
+    "name": "Farflight",
+    "meta": {
+      "type": "weapon",
+      "ID": 67
+    }
+  },
+  {
+    "id": 104,
+    "full": 4,
+    "name": "Lamplight",
+    "meta": {
+      "type": "weapon",
+      "ID": 72
+    }
+  },
+  {
+    "id": 105,
+    "full": 3,
+    "name": "Felorb",
+    "meta": {
+      "type": "weapon",
+      "ID": 76
+    }
+  },
+  {
+    "id": 106,
+    "full": 6,
+    "name": "Drakken",
+    "meta": {
+      "type": "weapon",
+      "ID": 77
+    }
+  },
+  {
+    "id": 107,
+    "full": 4,
+    "name": "The Marshes",
+    "meta": {
+      "type": "weapon",
+      "ID": 78
+    }
+  },
+  {
+    "id": 108,
+    "full": 6,
+    "name": "Summerwind",
+    "meta": {
+      "type": "weapon",
+      "ID": 80
+    }
+  },
+  {
+    "id": 109,
+    "full": 36,
+    "name": "Combax",
+    "meta": {
+      "type": "weapon",
+      "ID": 75
+    }
+  },
+  {
+    "id": 110,
+    "full": 4,
+    "name": "The Mines",
+    "meta": {
+      "type": "weapon",
+      "ID": 74
+    }
+  },
+  {
+    "id": 111,
+    "full": 3,
+    "name": "Thralldax",
+    "meta": {
+      "type": "weapon",
+      "ID": 73
+    }
+  },
+  {
+    "id": 112,
+    "full": 48,
+    "name": "Zahlteck",
+    "meta": {
+      "type": "weapon",
+      "ID": 70
+    }
+  },
+  {
+    "id": 113,
+    "full": 8,
+    "name": "Crystahl",
+    "meta": {
+      "type": "weapon",
+      "ID": 68
+    }
+  },
+  {
+    "id": 114,
+    "full": 13,
+    "name": "Batwing",
+    "meta": {
+      "type": "weapon",
+      "ID": 53
+    }
+  },
+  {
+    "id": 115,
+    "full": 3,
+    "name": "Ferflock",
+    "meta": {
+      "type": "weapon",
+      "ID": 5
+    }
+  },
+  {
+    "id": 116,
+    "full": 3,
+    "name": "Phoenixurn",
+    "meta": {
+      "type": "weapon",
+      "ID": 9
+    }
+  },
+  {
+    "id": 117,
+    "full": 3,
+    "name": "Shardite",
+    "meta": {
+      "type": "weapon",
+      "ID": 13
+    }
+  },
+  {
+    "id": 118,
+    "full": 6,
+    "name": "Flora",
+    "meta": {
+      "type": "weapon",
+      "ID": 17
+    }
+  },
+  {
+    "id": 119,
+    "full": 5,
+    "name": "The Deep",
+    "meta": {
+      "type": "weapon",
+      "ID": 20
+    }
+  },
+  {
+    "id": 120,
+    "full": 9,
+    "name": "Cumulus",
+    "meta": {
+      "type": "weapon",
+      "ID": 23
+    }
+  },
+  {
+    "id": 121,
+    "full": 8,
+    "name": "Dreamsphere",
+    "meta": {
+      "type": "weapon",
+      "ID": 47
+    }
+  },
+  {
+    "id": 122,
+    "full": 3,
+    "name": "The Calm",
+    "meta": {
+      "type": "weapon",
+      "ID": 58
+    }
+  },
+  {
+    "id": 123,
+    "full": 46,
+    "name": "Ascension",
+    "meta": {
+      "type": "weapon",
+      "ID": 63
+    }
+  },
+  {
+    "id": 124,
+    "full": 3,
+    "name": "Sunfire",
+    "meta": {
+      "type": "weapon",
+      "ID": 56
+    }
+  },
+  {
+    "id": 125,
+    "full": 3,
+    "name": "Tinkertown",
+    "meta": {
+      "type": "hat",
+      "ID": 45
+    }
+  },
+  {
+    "id": 126,
+    "full": 6,
+    "name": "Emporia",
+    "meta": {
+      "type": "hat",
+      "ID": 6
+    }
+  },
+  {
+    "id": 127,
+    "full": 3,
+    "name": "Winterhall",
+    "meta": {
+      "type": "hat",
+      "ID": 27
+    }
+  },
+  {
+    "id": 128,
+    "full": 3,
+    "name": "Landlubber",
+    "meta": {
+      "type": "hat",
+      "ID": 39
+    }
+  },
+  {
+    "id": 129,
+    "full": 38,
+    "name": "Beastcore",
+    "meta": {
+      "type": "hat",
+      "ID": 32
+    }
+  },
+  {
+    "id": 130,
+    "full": 43,
+    "name": "Aviatrix",
+    "meta": {
+      "type": "hat",
+      "ID": 41
+    }
+  },
+  {
+    "id": 131,
+    "full": 5,
+    "name": "Robonight",
+    "meta": {
+      "type": "hat",
+      "ID": 46
+    }
+  },
+  {
+    "id": 132,
+    "full": 8,
+    "name": "Discotek",
+    "meta": {
+      "type": "hat",
+      "ID": 47
+    }
+  },
+  {
+    "id": 133,
+    "full": 4,
+    "name": "Hunterlands",
+    "meta": {
+      "type": "hat",
+      "ID": 63
+    }
+  },
+  {
+    "id": 134,
+    "full": 4,
+    "name": "Monstroville",
+    "meta": {
+      "type": "hat",
+      "ID": 62
+    }
+  },
+  {
+    "id": 135,
+    "full": 28,
+    "name": "Balleerie",
+    "meta": {
+      "type": "hat",
+      "ID": 60
+    }
+  },
+  {
+    "id": 136,
+    "full": 4,
+    "name": "Engauge",
+    "meta": {
+      "type": "hat",
+      "ID": 59
+    }
+  },
+  {
+    "id": 137,
+    "full": 5,
+    "name": "Promenade",
+    "meta": {
+      "type": "hat",
+      "ID": 26
+    }
+  },
+  {
+    "id": 138,
+    "full": 44,
+    "name": "Backbone",
+    "meta": {
+      "type": "fossil",
+      "ID": 1
+    }
+  },
+  {
+    "id": 139,
+    "full": 75,
+    "name": "Amberlamp",
+    "meta": {
+      "type": "fossil",
+      "ID": 5
+    }
+  },
+  {
+    "id": 140,
+    "full": 7,
+    "name": "Warclaw",
+    "meta": {
+      "type": "fossil",
+      "ID": 7
+    }
+  },
+  {
+    "id": 141,
+    "full": 3,
+    "name": "Stonemarr",
+    "meta": {
+      "type": "fossil",
+      "ID": 11
+    }
+  },
+  {
+    "id": 142,
+    "full": 4,
+    "name": "Preservus",
+    "meta": {
+      "type": "fossil",
+      "ID": 8
+    }
+  },
+  {
+    "id": 143,
+    "full": 5,
+    "name": "Skeletus",
+    "meta": {
+      "type": "fossil",
+      "ID": 6
+    }
+  },
+  {
+    "id": 144,
+    "full": 5,
+    "name": "Ocshell",
+    "meta": {
+      "type": "fossil",
+      "ID": 9
+    }
+  },
+  {
+    "id": 145,
+    "full": 4,
+    "name": "Tyranus",
+    "meta": {
+      "type": "fossil",
+      "ID": 13
+    }
+  },
+  {
+    "id": 146,
+    "full": 3,
+    "name": "Shipyard",
+    "meta": {
+      "type": "dorm",
+      "ID": 52
+    }
+  },
+  {
+    "id": 147,
+    "full": 6,
+    "name": "Timezone",
+    "meta": {
+      "type": "dorm",
+      "ID": 68
+    }
+  },
+  {
+    "id": 148,
+    "full": 3,
+    "name": "Keynote",
+    "meta": {
+      "type": "dorm",
+      "ID": 65
+    }
+  },
+  {
+    "id": 149,
+    "full": 3,
+    "name": "Soundview",
+    "meta": {
+      "type": "dorm",
+      "ID": 58
+    }
+  },
+  {
+    "id": 150,
+    "full": 19,
+    "name": "Breakbeat",
+    "meta": {
+      "type": "dorm",
+      "ID": 51
+    }
+  },
+  {
+    "id": 151,
+    "full": 4,
+    "name": "Flashfire",
+    "meta": {
+      "type": "dorm",
+      "ID": 42
+    }
+  },
+  {
+    "id": 152,
+    "full": 5,
+    "name": "Earthrone",
+    "meta": {
+      "type": "dorm",
+      "ID": 45
+    }
+  },
+  {
+    "id": 153,
+    "full": 68,
+    "name": "Aquaria",
+    "meta": {
+      "type": "dorm",
+      "ID": 34
+    }
+  },
+  {
+    "id": 154,
+    "full": 23,
+    "name": "Dynodig",
+    "meta": {
+      "type": "dorm",
+      "ID": 57
+    }
+  },
+  {
+    "id": 155,
+    "full": 3,
+    "name": "Steamtock",
+    "meta": {
+      "type": "dorm",
+      "ID": 66
+    }
+  },
+  {
+    "id": 156,
+    "full": 27,
+    "name": "Bonestorm",
+    "meta": {
+      "type": "dorm",
+      "ID": 55
+    }
+  },
+  {
+    "id": 157,
+    "full": 3,
+    "name": "The Helm",
+    "meta": {
+      "type": "dorm",
+      "ID": 59
+    }
+  },
+  {
+    "id": 158,
+    "full": 3,
+    "name": "Flamelands",
+    "meta": {
+      "type": "dorm",
+      "ID": 36
+    }
+  },
+  {
+    "id": 159,
+    "full": 5,
+    "name": "Icelands",
+    "meta": {
+      "type": "dorm",
+      "ID": 37
+    }
+  },
+  {
+    "id": 160,
+    "full": 55,
+    "name": "Woodlands",
+    "meta": {
+      "type": "dorm",
+      "ID": 38
+    }
+  },
+  {
+    "id": 161,
+    "full": 6,
+    "name": "Thunderplains",
+    "meta": {
+      "type": "relic",
+      "ID": 1
+    }
+  },
+  {
+    "id": 162,
+    "full": 7,
+    "name": "Creepwood",
+    "meta": {
+      "type": "relic",
+      "ID": 2
+    }
+  },
+  {
+    "id": 163,
+    "full": 6,
+    "name": "Volcanica",
+    "meta": {
+      "type": "relic",
+      "ID": 3
+    }
+  },
+  {
+    "id": 164,
+    "full": 13,
+    "name": "Chilly Town",
+    "meta": {
+      "type": "relic",
+      "ID": 4
+    }
+  },
+  {
+    "id": 165,
+    "full": 4,
+    "name": "Seaside",
+    "meta": {
+      "type": "relic",
+      "ID": 5
+    }
+  },
+  {
+    "id": 166,
+    "full": 5,
+    "name": "Lifeforce",
+    "meta": {
+      "type": "relic",
+      "ID": 7
+    }
+  },
+  {
+    "id": 167,
+    "full": 4,
+    "name": "Luckshrine",
+    "meta": {
+      "type": "relic",
+      "ID": 8
+    }
+  },
+  {
+    "id": 168,
+    "full": 5,
+    "name": "Lightshow",
+    "meta": {
+      "type": "relic",
+      "ID": 16
+    }
+  },
+  {
+    "id": 169,
+    "full": 4,
+    "name": "Stonehurst",
+    "meta": {
+      "type": "relic",
+      "ID": 17
+    }
+  },
+  {
+    "id": 170,
+    "full": 5,
+    "name": "Emolten",
+    "meta": {
+      "type": "relic",
+      "ID": 18
+    }
+  },
+  {
+    "id": 171,
+    "full": 4,
+    "name": "Whitefrost",
+    "meta": {
+      "type": "relic",
+      "ID": 19
+    }
+  },
+  {
+    "id": 172,
+    "full": 6,
+    "name": "Waterworld",
+    "meta": {
+      "type": "relic",
+      "ID": 20
+    }
+  },
+  {
+    "id": 173,
+    "full": 13,
+    "name": "Cloudpuff",
+    "meta": {
+      "type": "relic",
+      "ID": 21
+    }
+  },
+  {
+    "id": 174,
+    "full": 5,
+    "name": "Treesprite",
+    "meta": {
+      "type": "relic",
+      "ID": 22
+    }
+  },
+  {
+    "id": 175,
+    "full": 4,
+    "name": "Melty Plains",
+    "meta": {
+      "type": "relic",
+      "ID": 23
+    }
+  },
+  {
+    "id": 176,
+    "full": 4,
+    "name": "Snowday",
+    "meta": {
+      "type": "relic",
+      "ID": 24
+    }
+  },
+  {
+    "id": 177,
+    "full": 59,
+    "name": "Bubble Bay",
+    "meta": {
+      "type": "relic",
+      "ID": 25
+    }
+  },
+  {
+    "id": 178,
+    "full": 4,
+    "name": "Thunderstone",
+    "meta": {
+      "type": "relic",
+      "ID": 29
+    }
+  },
+  {
+    "id": 179,
+    "full": 10,
+    "name": "Earthstone",
+    "meta": {
+      "type": "relic",
+      "ID": 30
+    }
+  },
+  {
+    "id": 180,
+    "full": 10,
+    "name": "Firestone",
+    "meta": {
+      "type": "relic",
+      "ID": 31
+    }
+  },
+  {
+    "id": 181,
+    "full": 3,
+    "name": "Incantrik",
+    "meta": {
+      "type": "outfit",
+      "ID": 1
+    }
+  },
+  {
+    "id": 182,
+    "full": 6,
+    "name": "Celestial",
+    "meta": {
+      "type": "outfit",
+      "ID": 5
+    }
+  },
+  {
+    "id": 183,
+    "full": 6,
+    "name": "Powerthrone",
+    "meta": {
+      "type": "outfit",
+      "ID": 7
+    }
+  },
+  {
+    "id": 184,
+    "full": 3,
+    "name": "Grasslands",
+    "meta": {
+      "type": "outfit",
+      "ID": 29
+    }
+  },
+  {
+    "id": 185,
+    "full": 5,
+    "name": "Naturill",
+    "meta": {
+      "type": "outfit",
+      "ID": 31
+    }
+  },
+  {
+    "id": 186,
+    "full": 4,
+    "name": "Sleetwind",
+    "meta": {
+      "type": "outfit",
+      "ID": 33
+    }
+  },
+  {
+    "id": 187,
+    "full": 3,
+    "name": "Sandshore",
+    "meta": {
+      "type": "outfit",
+      "ID": 40
+    }
+  },
+  {
+    "id": 188,
+    "full": 7,
+    "name": "Danceclub",
+    "meta": {
+      "type": "outfit",
+      "ID": 42
+    }
+  },
+  {
+    "id": 189,
+    "full": 5,
+    "name": "Flamekeep",
+    "meta": {
+      "type": "outfit",
+      "ID": 34
+    }
+  },
+  {
+    "id": 190,
+    "full": 15,
+    "name": "Robox",
+    "meta": {
+      "type": "outfit",
+      "ID": 43
+    }
+  },
+  {
+    "id": 191,
+    "full": 4,
+    "name": "The Haunt",
+    "meta": {
+      "type": "outfit",
+      "ID": 46
+    }
+  },
+  {
+    "id": 192,
+    "full": 14,
+    "name": "Firestrike",
+    "meta": {
+      "type": "outfit",
+      "ID": 52
+    }
+  },
+  {
+    "id": 193,
+    "full": 5,
+    "name": "Raidsong",
+    "meta": {
+      "type": "outfit",
+      "ID": 53
+    }
+  },
+  {
+    "id": 194,
+    "full": 4,
+    "name": "King's Bounty",
+    "meta": {
+      "type": "outfit",
+      "ID": 54
+    }
+  },
+  {
+    "id": 195,
+    "full": 3,
+    "name": "Timechild",
+    "meta": {
+      "type": "outfit",
+      "ID": 41
+    }
+  },
+  {
+    "id": 196,
+    "full": 50,
+    "name": "Coalshrike",
+    "meta": {
+      "type": "outfit",
+      "ID": 8
+    }
+  },
+  {
+    "id": 197,
+    "full": 4,
+    "name": "Softwater",
+    "meta": {
+      "type": "outfit",
+      "ID": 9
+    }
+  },
+  {
+    "id": 198,
+    "full": 4,
+    "name": "Threadfire",
+    "meta": {
+      "type": "outfit",
+      "ID": 10
+    }
+  },
+  {
+    "id": 199,
+    "full": 6,
+    "name": "Cloudshore",
+    "meta": {
+      "type": "outfit",
+      "ID": 11
+    }
+  },
+  {
+    "id": 200,
+    "full": 4,
+    "name": "Forestedge",
+    "meta": {
+      "type": "outfit",
+      "ID": 12
+    }
+  }
+]
