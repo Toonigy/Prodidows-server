@@ -27,7 +27,7 @@ app.options("*", cors(corsOptions));
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
-        origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com"],
+        origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io"],
         methods: ["GET", "POST"],
         credentials: true,
         transports: ["websocket"] // Force WebSockets
