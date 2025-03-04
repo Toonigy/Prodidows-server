@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000; // Use Render's port
 
 // Enable CORS for a specific frontend (Replace with your actual frontend URL)
 const corsOptions = {
-    origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io"],
+    origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io", "http://localhost"],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
@@ -27,7 +27,7 @@ app.options("*", cors(corsOptions));
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
-        origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io"],
+        origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io", "http://localhost"],
         methods: ["GET", "POST"],
         credentials: true,
         transports: ["websocket"] // Force WebSockets
