@@ -51,7 +51,7 @@ let worlds = [
   },
     {
         "id": 1,
-        "full": 76,
+        "full": 0,
         "name": "Fireplane",
         "meta": {
             "tag": "fire"
@@ -59,7 +59,7 @@ let worlds = [
     },
     {
         "id": 2,
-        "full": 6,
+        "full": 0,
         "name": "Waterscape",
         "meta": {
             "tag": "water"
