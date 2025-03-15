@@ -41,6 +41,14 @@ app.get("/", (req, res) => {
 
 // Initialize the world list
 let worlds = [
+  {
+    "id": 0,
+    "full": 0,
+    "name": "Multiplayer Test server",
+    "meta": {
+      "tag": "fire"
+    }
+  },
     {
         "id": 1,
         "full": 76,
