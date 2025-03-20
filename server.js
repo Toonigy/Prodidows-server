@@ -1,49 +1,43 @@
 const express = require("express");
-const cors = require("cors");
 const http = require("http");
-const { Server } = require("socket.io");
+const WebSocket = require("ws");
 
 const app = express();
-const port = process.env.PORT || 3000;
-
-const corsOptions = {
-    origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io", "http://localhost"],
-    methods: ["GET", "POST"],
-    credentials: true
-};
-
-app.use(cors(corsOptions));
-app.use(express.json());
-
-// Create HTTP server
 const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-// Attach WebSocket server to the HTTP server
-const io = new Server(server, {
-    cors: {
-        origin: ["https://toonigy.github.io", "https://prodidows-server.onrender.com", "https://xpmuser.github.io", "http://localhost"],
-        methods: ["GET", "POST"],
-        credentials: true,
-        transports: ["websocket"] // Ensure WebSocket support
+// Sample JSON data
+const servers = [
+  { id: 0, full: 0, name: "Multiplayer Test server", meta: { tag: "fire" } },
+  { id: 1, full: 0, name: "Fireplane", meta: { tag: "fire" } },
+  { id: 2, full: 0, name: "Waterscape", meta: { tag: "water" } }
+];
+
+// WebSocket connection handling
+wss.on("connection", (ws) => {
+  console.log("Client connected");
+
+  // Send initial data
+  ws.send(JSON.stringify(servers));
+
+  ws.on("message", (message) => {
+    console.log("Received:", message);
+    
+    // Example: Respond with filtered data based on a tag
+    try {
+      const data = JSON.parse(message);
+      if (data.tag) {
+        const filtered = servers.filter(s => s.meta.tag === data.tag);
+        ws.send(JSON.stringify(filtered));
+      }
+    } catch (error) {
+      console.error("Invalid JSON received");
     }
+  });
+
+  ws.on("close", () => console.log("Client disconnected"));
 });
 
-// Socket.io Event Handling
-io.on("connection", (socket) => {
-    console.log(`A user connected: ${socket.id}`);
-
-    socket.on("joinWorld", (worldId) => {
-        console.log(`Player ${socket.id} joined world ${worldId}`);
-        io.emit("playerJoined", { playerId: socket.id, worldId });
-    });
-
-    socket.on("disconnect", () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        io.emit("playerDisconnected", { playerId: socket.id });
-    });
-});
-
-// Start the server
-server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+// Start server on Render
+const PORT = process.env.PORT || 10000; // Render will assign a port
+server.listen(PORT, () => console.log(`WebSocket Server running on port ${PORT}`));
