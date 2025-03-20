@@ -13,31 +13,38 @@ const servers = [
   { id: 2, full: 0, name: "Waterscape", meta: { tag: "water" } }
 ];
 
-// WebSocket connection handling
+// Handle WebSocket connections
 wss.on("connection", (ws) => {
   console.log("Client connected");
 
   // Send initial data
-  ws.send(JSON.stringify(servers));
+  ws.send(JSON.stringify({ type: "init", servers }));
 
   ws.on("message", (message) => {
     console.log("Received:", message);
-    
-    // Example: Respond with filtered data based on a tag
+
     try {
       const data = JSON.parse(message);
-      if (data.tag) {
-        const filtered = servers.filter(s => s.meta.tag === data.tag);
-        ws.send(JSON.stringify(filtered));
+
+      if (data.type === "filter" && data.tag) {
+        const filtered = servers.filter((s) => s.meta.tag === data.tag);
+        ws.send(JSON.stringify({ type: "filtered", servers: filtered }));
       }
     } catch (error) {
-      console.error("Invalid JSON received");
+      console.error("Invalid JSON received:", error);
     }
   });
 
-  ws.on("close", () => console.log("Client disconnected"));
+  ws.on("close", () => {
+    console.log("Client disconnected");
+  });
 });
 
-// Start server on Render
-const PORT = process.env.PORT || 10000; // Render will assign a port
+// Serve a basic status page
+app.get("/", (req, res) => {
+  res.send("WebSocket server is running.");
+});
+
+// Start server
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => console.log(`WebSocket Server running on port ${PORT}`));
