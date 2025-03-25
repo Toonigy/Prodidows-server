@@ -1,26 +1,783 @@
-[
-  {
-    "id": 0,
-    "full": 0,
-    "name": "Multiplayer Test server",
-    "meta": {
-      "tag": "fire"
-    }
-  },
-    {
-        "id": 1,
-        "full": 0,
-        "name": "Fireplane",
-        "meta": {
-            "tag": "fire"
-        }
-    },
-    {
-        "id": 2,
-        "full": 0,
-        "name": "Waterscape",
-        "meta": {
-            "tag": "water"
-        }
-    }
-]
+), Prodigy.Menu.Server.getServerName = function(e) {
+	return Prodigy.Menu.Server.NAMES[e - 1].name
+}, Prodigy.Menu.Server.getServerIcon = function(e) {
+	return Util.convertItemToIcon(Prodigy.Menu.Server.NAMES[e - 1])
+}, Prodigy.Menu.Server.NAMES = [{
+	name: "Fireplane",
+	tag: "fire"
+}, {
+	name: "Waterscape",
+	tag: "water"
+}, {
+	name: "Earthshire",
+	tag: "earth"
+}, {
+	name: "Airmeld",
+	tag: "air"
+}, {
+	name: "Icefields",
+	tag: "ice"
+}, {
+	name: "Astrallum",
+	tag: "wizard"
+}, {
+	name: "Cumulite",
+	tag: "zone-air"
+}, {
+	name: "Grassy Plains",
+	tag: "zone-earth"
+}, {
+	name: "Emberland",
+	tag: "zone-fire"
+}, {
+	name: "Coldshard",
+	tag: "zone-ice"
+}, {
+	name: "Riverdeep",
+	tag: "zone-water"
+}, {
+	name: "Animalia",
+	tag: "pet"
+}, {
+	name: "Prodigy",
+	tag: "trophyGold"
+}, {
+	name: "Silverdome",
+	tag: "trophySilver"
+}, {
+	name: "Culldeep",
+	tag: "trophyBronze"
+}, {
+	name: "Travellog",
+	tag: "map"
+}, {
+	name: "Illustrus",
+	tag: "leaderboard"
+}, {
+	name: "Estrial",
+	tag: "boss"
+}, {
+	name: "Champion",
+	tag: "award"
+}, {
+	name: "Escholus",
+	tag: "book"
+}, {
+	name: "Presentia",
+	tag: "gift"
+}, {
+	name: "Dragonfire",
+	type: "pet",
+	ID: 8
+}, {
+	name: "Unikind",
+	type: "pet",
+	ID: 35
+}, {
+	name: "Skyfall",
+	type: "pet",
+	ID: 56
+}, {
+	name: "Flamespace",
+	type: "pet",
+	ID: 63
+}, {
+	name: "Faerealm",
+	type: "pet",
+	ID: 61
+}, {
+	name: "Snowbaul",
+	type: "pet",
+	ID: 87
+}, {
+	name: "Treasureland",
+	type: "pet",
+	ID: 98
+}, {
+	name: "Robobit",
+	type: "pet",
+	ID: 113
+}, {
+	name: "Dynocore",
+	type: "pet",
+	ID: 111
+}, {
+	name: "Royalway",
+	type: "pet",
+	ID: 53
+}, {
+	name: "Flexor",
+	type: "pet",
+	ID: 47
+}, {
+	name: "Phoenick",
+	type: "pet",
+	ID: 48
+}, {
+	name: "Lunaris",
+	type: "pet",
+	ID: 20
+}, {
+	name: "Birdcage",
+	type: "pet",
+	ID: 4
+}, {
+	name: "Oceanus",
+	type: "pet",
+	ID: 101
+}, {
+	name: "Granite",
+	type: "pet",
+	ID: 80
+}, {
+	name: "Prehistoria",
+	type: "pet",
+	ID: 107
+}, {
+	name: "Squeekore",
+	type: "pet",
+	ID: 1
+}, {
+	name: "Leftfield",
+	type: "pet",
+	ID: 30
+}, {
+	name: "Furnace",
+	type: "pet",
+	ID: 34
+}, {
+	name: "Ghosttown",
+	type: "pet",
+	ID: 90
+}, {
+	name: "Amphibia",
+	type: "pet",
+	ID: 94
+}, {
+	name: "Cloudheart",
+	type: "pet",
+	ID: 3
+}, {
+	name: "Dracochus",
+	type: "pet",
+	ID: 7
+}, {
+	name: "The Hive",
+	type: "pet",
+	ID: 25
+}, {
+	name: "Heatwave",
+	type: "pet",
+	ID: 28
+}, {
+	name: "Razorfire",
+	type: "pet",
+	ID: 29
+}, {
+	name: "Gaia",
+	type: "pet",
+	ID: 32
+}, {
+	name: "Landlion",
+	type: "pet",
+	ID: 39
+}, {
+	name: "Slitherus",
+	type: "pet",
+	ID: 43
+}, {
+	name: "Wolfbreath",
+	type: "pet",
+	ID: 50
+}, {
+	name: "Grumpus",
+	type: "pet",
+	ID: 60
+}, {
+	name: "Garmlia",
+	type: "pet",
+	ID: 82
+}, {
+	name: "Shnowbahl",
+	type: "pet",
+	ID: 87
+}, {
+	name: "Frozone",
+	type: "pet",
+	ID: 88
+}, {
+	name: "Sealing",
+	type: "pet",
+	ID: 99
+}, {
+	name: "Deepsea",
+	type: "pet",
+	ID: 102
+}, {
+	name: "Cavernous",
+	type: "pet",
+	ID: 104
+}, {
+	name: "Sprocket",
+	type: "pet",
+	ID: 119
+}, {
+	name: "Arachnia",
+	type: "pet",
+	ID: 121
+}, {
+	name: "Skywing",
+	type: "item",
+	ID: 7
+}, {
+	name: "Diamondmine",
+	type: "item",
+	ID: 28
+}, {
+	name: "Frostwick",
+	type: "item",
+	ID: 27
+}, {
+	name: "Gemcraft",
+	type: "item",
+	ID: 20
+}, {
+	name: "Goldmire",
+	type: "item",
+	ID: 26
+}, {
+	name: "Solarus",
+	type: "item",
+	ID: 35
+}, {
+	name: "Cloudcall",
+	type: "item",
+	ID: 46
+}, {
+	name: "Farmland",
+	type: "item",
+	ID: 44
+}, {
+	name: "Doubloon",
+	type: "item",
+	ID: 55
+}, {
+	name: "Hatchery",
+	type: "item",
+	ID: 64
+}, {
+	name: "Plank",
+	type: "item",
+	ID: 51
+}, {
+	name: "Gearshop",
+	type: "item",
+	ID: 47
+}, {
+	name: "Mechanico",
+	type: "item",
+	ID: 53
+}, {
+	name: "Mandora",
+	type: "item",
+	ID: 24
+}, {
+	name: "Dracogem",
+	type: "item",
+	ID: 36
+}, {
+	name: "Borderland",
+	type: "item",
+	ID: 56
+}, {
+	name: "Voyatet",
+	type: "item",
+	ID: 57
+}, {
+	name: "Keystone",
+	type: "item",
+	ID: 59
+}, {
+	name: "Twilight",
+	type: "item",
+	ID: 30
+}, {
+	name: "Emerald",
+	type: "item",
+	ID: 21
+}, {
+	name: "Sapphire",
+	type: "item",
+	ID: 28
+}, {
+	name: "Ruby",
+	type: "item",
+	ID: 34
+}, {
+	name: "The Freezer",
+	type: "item",
+	ID: 32
+}, {
+	name: "Memoria",
+	type: "item",
+	ID: 31
+}, {
+	name: "Beachfront",
+	type: "item",
+	ID: 42
+}, {
+	name: "Monsteye",
+	type: "item",
+	ID: 48
+}, {
+	name: "Pyrestone",
+	type: "item",
+	ID: 71
+}, {
+	name: "Orchestret",
+	type: "item",
+	ID: 70
+}, {
+	name: "Salabrex",
+	type: "item",
+	ID: 76
+}, {
+	name: "Embervine",
+	type: "item",
+	ID: 33
+}, {
+	name: "Enchantric",
+	type: "weapon",
+	ID: 1
+}, {
+	name: "Spellbound",
+	type: "weapon",
+	ID: 4
+}, {
+	name: "Starlight",
+	type: "weapon",
+	ID: 2
+}, {
+	name: "Reptilia",
+	type: "weapon",
+	ID: 6
+}, {
+	name: "Moonsight",
+	type: "weapon",
+	ID: 7
+}, {
+	name: "The Pale",
+	type: "weapon",
+	ID: 16
+}, {
+	name: "Flowerseed",
+	type: "weapon",
+	ID: 15
+}, {
+	name: "Vinewood",
+	type: "weapon",
+	ID: 24
+}, {
+	name: "Treebark",
+	type: "weapon",
+	ID: 36
+}, {
+	name: "Felspore",
+	type: "weapon",
+	ID: 54
+}, {
+	name: "Pirate Bay",
+	type: "weapon",
+	ID: 65
+}, {
+	name: "Farflight",
+	type: "weapon",
+	ID: 67
+}, {
+	name: "Lamplight",
+	type: "weapon",
+	ID: 72
+}, {
+	name: "Felorb",
+	type: "weapon",
+	ID: 76
+}, {
+	name: "Drakken",
+	type: "weapon",
+	ID: 77
+}, {
+	name: "The Marshes",
+	type: "weapon",
+	ID: 78
+}, {
+	name: "Summerwind",
+	type: "weapon",
+	ID: 80
+}, {
+	name: "Combax",
+	type: "weapon",
+	ID: 75
+}, {
+	name: "The Mines",
+	type: "weapon",
+	ID: 74
+}, {
+	name: "Thralldax",
+	type: "weapon",
+	ID: 73
+}, {
+	name: "Zahlteck",
+	type: "weapon",
+	ID: 70
+}, {
+	name: "Crystahl",
+	type: "weapon",
+	ID: 68
+}, {
+	name: "Batwing",
+	type: "weapon",
+	ID: 53
+}, {
+	name: "Ferflock",
+	type: "weapon",
+	ID: 5
+}, {
+	name: "Phoenixurn",
+	type: "weapon",
+	ID: 9
+}, {
+	name: "Shardite",
+	type: "weapon",
+	ID: 13
+}, {
+	name: "Flora",
+	type: "weapon",
+	ID: 17
+}, {
+	name: "The Deep",
+	type: "weapon",
+	ID: 20
+}, {
+	name: "Cumulus",
+	type: "weapon",
+	ID: 23
+}, {
+	name: "Dreamsphere",
+	type: "weapon",
+	ID: 47
+}, {
+	name: "The Calm",
+	type: "weapon",
+	ID: 58
+}, {
+	name: "Ascension",
+	type: "weapon",
+	ID: 63
+}, {
+	name: "Sunfire",
+	type: "weapon",
+	ID: 56
+}, {
+	name: "Tinkertown",
+	type: "hat",
+	ID: 45
+}, {
+	name: "Emporia",
+	type: "hat",
+	ID: 6
+}, {
+	name: "Winterhall",
+	type: "hat",
+	ID: 27
+}, {
+	name: "Landlubber",
+	type: "hat",
+	ID: 39
+}, {
+	name: "Beastcore",
+	type: "hat",
+	ID: 32
+}, {
+	name: "Aviatrix",
+	type: "hat",
+	ID: 41
+}, {
+	name: "Robonight",
+	type: "hat",
+	ID: 46
+}, {
+	name: "Discotek",
+	type: "hat",
+	ID: 47
+}, {
+	name: "Hunterlands",
+	type: "hat",
+	ID: 63
+}, {
+	name: "Monstroville",
+	type: "hat",
+	ID: 62
+}, {
+	name: "Balleerie",
+	type: "hat",
+	ID: 60
+}, {
+	name: "Engauge",
+	type: "hat",
+	ID: 59
+}, {
+	name: "Promenade",
+	type: "hat",
+	ID: 26
+}, {
+	name: "Backbone",
+	type: "fossil",
+	ID: 1
+}, {
+	name: "Amberlamp",
+	type: "fossil",
+	ID: 5
+}, {
+	name: "Warclaw",
+	type: "fossil",
+	ID: 7
+}, {
+	name: "Stonemarr",
+	type: "fossil",
+	ID: 11
+}, {
+	name: "Preservus",
+	type: "fossil",
+	ID: 8
+}, {
+	name: "Skeletus",
+	type: "fossil",
+	ID: 6
+}, {
+	name: "Ocshell",
+	type: "fossil",
+	ID: 9
+}, {
+	name: "Tyranus",
+	type: "fossil",
+	ID: 13
+}, {
+	name: "Shipyard",
+	type: "dorm",
+	ID: 52
+}, {
+	name: "Timezone",
+	type: "dorm",
+	ID: 68
+}, {
+	name: "Keynote",
+	type: "dorm",
+	ID: 65
+}, {
+	name: "Soundview",
+	type: "dorm",
+	ID: 58
+}, {
+	name: "Breakbeat",
+	type: "dorm",
+	ID: 51
+}, {
+	name: "Flashfire",
+	type: "dorm",
+	ID: 42
+}, {
+	name: "Earthrone",
+	type: "dorm",
+	ID: 45
+}, {
+	name: "Aquaria",
+	type: "dorm",
+	ID: 34
+}, {
+	name: "Dynodig",
+	type: "dorm",
+	ID: 57
+}, {
+	name: "Steamtock",
+	type: "dorm",
+	ID: 66
+}, {
+	name: "Bonestorm",
+	type: "dorm",
+	ID: 55
+}, {
+	name: "The Helm",
+	type: "dorm",
+	ID: 59
+}, {
+	name: "Flamelands",
+	type: "dorm",
+	ID: 36
+}, {
+	name: "Icelands",
+	type: "dorm",
+	ID: 37
+}, {
+	name: "Woodlands",
+	type: "dorm",
+	ID: 38
+}, {
+	name: "Thunderplains",
+	type: "relic",
+	ID: 1
+}, {
+	name: "Creepwood",
+	type: "relic",
+	ID: 2
+}, {
+	name: "Volcanica",
+	type: "relic",
+	ID: 3
+}, {
+	name: "Chilly Town",
+	type: "relic",
+	ID: 4
+}, {
+	name: "Seaside",
+	type: "relic",
+	ID: 5
+}, {
+	name: "Lifeforce",
+	type: "relic",
+	ID: 7
+}, {
+	name: "Luckshrine",
+	type: "relic",
+	ID: 8
+}, {
+	name: "Lightshow",
+	type: "relic",
+	ID: 16
+}, {
+	name: "Stonehurst",
+	type: "relic",
+	ID: 17
+}, {
+	name: "Emolten",
+	type: "relic",
+	ID: 18
+}, {
+	name: "Whitefrost",
+	type: "relic",
+	ID: 19
+}, {
+	name: "Waterworld",
+	type: "relic",
+	ID: 20
+}, {
+	name: "Cloudpuff",
+	type: "relic",
+	ID: 21
+}, {
+	name: "Treesprite",
+	type: "relic",
+	ID: 22
+}, {
+	name: "Melty Plains",
+	type: "relic",
+	ID: 23
+}, {
+	name: "Snowday",
+	type: "relic",
+	ID: 24
+}, {
+	name: "Bubble Bay",
+	type: "relic",
+	ID: 25
+}, {
+	name: "Thunderstone",
+	type: "relic",
+	ID: 29
+}, {
+	name: "Earthstone",
+	type: "relic",
+	ID: 30
+}, {
+	name: "Firestone",
+	type: "relic",
+	ID: 31
+}, {
+	name: "Incantrik",
+	type: "outfit",
+	ID: 1
+}, {
+	name: "Celestial",
+	type: "outfit",
+	ID: 5
+}, {
+	name: "Powerthrone",
+	type: "outfit",
+	ID: 7
+}, {
+	name: "Grasslands",
+	type: "outfit",
+	ID: 29
+}, {
+	name: "Naturill",
+	type: "outfit",
+	ID: 31
+}, {
+	name: "Sleetwind",
+	type: "outfit",
+	ID: 33
+}, {
+	name: "Sandshore",
+	type: "outfit",
+	ID: 40
+}, {
+	name: "Danceclub",
+	type: "outfit",
+	ID: 42
+}, {
+	name: "Flamekeep",
+	type: "outfit",
+	ID: 34
+}, {
+	name: "Robox",
+	type: "outfit",
+	ID: 43
+}, {
+	name: "The Haunt",
+	type: "outfit",
+	ID: 46
+}, {
+	name: "Firestrike",
+	type: "outfit",
+	ID: 52
+}, {
+	name: "Raidsong",
+	type: "outfit",
+	ID: 53
+}, {
+	name: "King's Bounty",
+	type: "outfit",
+	ID: 54
+}, {
+	name: "Timechild",
+	type: "outfit",
+	ID: 41
+}, {
+	name: "Coalshrike",
+	type: "outfit",
+	ID: 8
+}, {
+	name: "Softwater",
+	type: "outfit",
+	ID: 9
+}, {
+	name: "Threadfire",
+	type: "outfit",
+	ID: 10
+}, {
+	name: "Cloudshore",
+	type: "outfit",
+	ID: 11
+}, {
+	name: "Forestedge",
+	type: "outfit",
+	ID: 12
