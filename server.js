@@ -18,8 +18,8 @@ const servers = [
 ];
 
 // Handle WebSocket connections
-wss.on("connection", (ws) => {
-  console.log("📡 Client connected");
+wss.on("connection", (ws, req) => {
+  console.log("📡 Client connected:", req.socket.remoteAddress);
 
   // Send initial world list data
   ws.send(JSON.stringify({ type: "init", servers }));
@@ -49,10 +49,10 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Start the server
+// Use Render's assigned port
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ WebSocket Server running on:`);
-  console.log(`   🌍 HTTP: http://localhost:${PORT}`);
-  console.log(`   🔗 WebSocket: ws://localhost:${PORT}`);
+  console.log(`   🌍 HTTP: https://your-app-name.onrender.com`);
+  console.log(`   🔗 WebSocket: wss://your-app-name.onrender.com`);
 });
