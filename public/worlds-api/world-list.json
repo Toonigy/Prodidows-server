@@ -9,6 +9,7 @@
    },
      {
          "id": 1,
+         path: "/worlds/fireplane",
          "full": 0,
          "name": "Fireplane",
          "meta": {
