@@ -1,27 +1,31 @@
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// Serve static files from the "public" folder
+app.use(express.static(path.join(__dirname, "public")));
+
 // Sample JSON data
 const servers = [
-  { id: 0, full: 0, name: "Multiplayer Test server", meta: { tag: "fire" } },
+  { id: 0, full: 0, name: "Multiplayer Test Server", meta: { tag: "fire" } },
   { id: 1, full: 0, name: "Fireplane", meta: { tag: "fire" } },
   { id: 2, full: 0, name: "Waterscape", meta: { tag: "water" } }
 ];
 
 // Handle WebSocket connections
 wss.on("connection", (ws) => {
-  console.log("Client connected");
+  console.log("📡 Client connected");
 
-  // Send initial data
+  // Send initial world list data
   ws.send(JSON.stringify({ type: "init", servers }));
 
   ws.on("message", (message) => {
-    console.log("Received:", message);
+    console.log("📩 Received:", message);
 
     try {
       const data = JSON.parse(message);
@@ -31,20 +35,24 @@ wss.on("connection", (ws) => {
         ws.send(JSON.stringify({ type: "filtered", servers: filtered }));
       }
     } catch (error) {
-      console.error("Invalid JSON received:", error);
+      console.error("🚨 Invalid JSON received:", error);
     }
   });
 
   ws.on("close", () => {
-    console.log("Client disconnected");
+    console.log("❌ Client disconnected");
   });
 });
 
-// Serve a basic status page
+// Serve `index.html` when accessing the root URL
 app.get("/", (req, res) => {
-  res.send("WebSocket server is running.");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Start server
+// Start the server
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`WebSocket Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`✅ WebSocket Server running on:`);
+  console.log(`   🌍 HTTP: http://localhost:${PORT}`);
+  console.log(`   🔗 WebSocket: ws://localhost:${PORT}`);
+});
