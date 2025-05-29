@@ -49,7 +49,8 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Use Render's assigned port
+// Use Render's assigned port or try Phaser's assigned port.
+const PORT = process.env.PORT || 8083;
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ WebSocket Server running on:`);
