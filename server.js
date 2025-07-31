@@ -15,13 +15,13 @@ const wss = new WebSocket.Server({ noServer: true });
 // This is where your index.html, game.min.js, etc. should be.
 app.use(express.static(path.join(__dirname, "public")));
 
-// --- IMPORTANT: Update the `socketServer` URL for your live deployment ---
-// You will need to replace 'your-game-subdomain' with your actual subdomain on Render.
+// --- IMPORTANT: The `socketServer` URL is now updated for your live deployment ---
+// This URL will be used by the client to connect to the game server's WebSocket.
 const servers = [
   {
     "id": "fireplane",
     "name": "Fireplane",
-    "socketServer": "wss://your-game-subdomain.onrender.com/game-api/v2/worlds",
+    "socketServer": "wss://prodidows-server.onrender.com/game-api/v2/worlds",
     "region": "us",
     "connectionCount": 0,
     "maxConnections": 100
