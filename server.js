@@ -4,55 +4,76 @@ const WebSocket = require("ws");
 const path = require("path");
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+// Render automatically provides a PORT environment variable.
+const PORT = process.env.PORT || 10000;
 
-// Serve static files from the "public" folder
+// Create an HTTP server
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ noServer: true });
+
+// Serve static files from a 'public' folder.
+// This is where your index.html, game.min.js, etc. should be.
 app.use(express.static(path.join(__dirname, "public")));
 
-// Sample JSON data
+// --- IMPORTANT: Update the `socketServer` URL for your live deployment ---
+// You will need to replace 'your-game-subdomain' with your actual subdomain on Render.
 const servers = [
-  { id: 0, full: 0, name: "Multiplayer Test Server", meta: { tag: "fire" } },
-  { id: 1, full: 0, name: "Fireplane", meta: { tag: "fire" } },
-  { id: 2, full: 0, name: "Waterscape", meta: { tag: "water" } }
+  {
+    "id": "fireplane",
+    "name": "Fireplane",
+    "socketServer": "wss://your-game-subdomain.onrender.com/game-api/v2/worlds",
+    "region": "us",
+    "connectionCount": 0,
+    "maxConnections": 100
+  }
 ];
 
-// Handle WebSocket connections
-wss.on("connection", (ws, req) => {
-  console.log("📡 Client connected:", req.socket.remoteAddress);
-
-  // Send initial world list data
-  ws.send(JSON.stringify({ type: "init", servers }));
-
-  ws.on("message", (message) => {
-    console.log("📩 Received:", message);
-
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === "filter" && data.tag) {
-        const filtered = servers.filter((s) => s.meta.tag === data.tag);
-        ws.send(JSON.stringify({ type: "filtered", servers: filtered }));
-      }
-    } catch (error) {
-      console.error("🚨 Invalid JSON received:", error);
-    }
-  });
-
-  ws.on("close", () => {
-    console.log("❌ Client disconnected");
-  });
-});
-
-// Serve `index.html` when accessing the root URL
+// Serve `index.html`
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Use Render's assigned port or try Phaser's assigned port.
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ WebSocket Server running on:`);
-  console.log(`   🌍 HTTP: https://your-app-name.onrender.com`);
-  console.log(`   🔗 WebSocket: wss://your-app-name.onrender.com`);
+// Upgrade WebSocket
+server.on("upgrade", (req, socket, head) => {
+  // Only handle WebSocket upgrade for the /game-api/v2/worlds path
+  if (req.url === "/game-api/v2/worlds") {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  } else {
+    // Refuse upgrade for other paths
+    socket.write("HTTP/1.1 404 Not Found\\r\\n\\r\\n");
+    socket.destroy();
+  }
+});
+
+// Handle world list WebSocket connection
+wss.on("connection", (ws) => {
+  console.log("🌐 Client connected to /game-api/v2/worlds");
+
+  // Send full world list on connect
+  ws.send(JSON.stringify({
+    type: "worlds",
+    servers
+  }));
+
+  ws.on("message", (msg) => {
+    try {
+      const data = JSON.parse(msg);
+      // Example of handling a login event
+      if (data.type === "login" && data.userId) {
+        console.log(`✅ User logged in: ${data.userId}`);
+      }
+    } catch (e) {
+      console.error("Invalid message", e);
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("❌ Disconnected from /game-api/v2/worlds");
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`✅ Server is listening on port ${PORT}`);
 });
