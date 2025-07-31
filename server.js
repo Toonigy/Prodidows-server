@@ -21,7 +21,7 @@ const servers = [
   {
     "id": "fireplane",
     "name": "Fireplane",
-    "socketServer": "wss://your-game-subdomain.onrender.com/worlds",
+    "socketServer": "wss://your-game-subdomain.onrender.com/game-api/v2/worlds",
     "region": "us",
     "connectionCount": 0,
     "maxConnections": 100
@@ -35,8 +35,8 @@ app.get("/", (req, res) => {
 
 // Upgrade WebSocket
 server.on("upgrade", (req, socket, head) => {
-  // Only handle WebSocket upgrade for the /worlds path
-  if (req.url === "/worlds") {
+  // Only handle WebSocket upgrade for the /game-api/v2/worlds path
+  if (req.url === "/game-api/v2/worlds") {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });
@@ -49,7 +49,7 @@ server.on("upgrade", (req, socket, head) => {
 
 // Handle world list WebSocket connection
 wss.on("connection", (ws) => {
-  console.log("🌐 Client connected to /worlds");
+  console.log("🌐 Client connected to /game-api/v2/worlds");
 
   // Send full world list on connect
   ws.send(JSON.stringify({
@@ -70,7 +70,7 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    console.log("❌ Disconnected from /worlds");
+    console.log("❌ Disconnected from /game-api/v2/worlds");
   });
 });
 
