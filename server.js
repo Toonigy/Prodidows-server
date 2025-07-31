@@ -21,7 +21,7 @@ const servers = [
   {
     "id": "fireplane",
     "name": "Fireplane",
-    "socketServer": "wss://your-game-subdomain.onrender.com/game-api/v2/worlds",
+    "socketServer": "wss://your-game-subdomain.onrender.com/worlds",
     "region": "us",
     "connectionCount": 0,
     "maxConnections": 100
@@ -35,7 +35,7 @@ app.get("/", (req, res) => {
 
 // Upgrade WebSocket
 server.on("upgrade", (req, socket, head) => {
-  // Only handle WebSocket upgrade for the /game-api/v2/worlds path
+  // Only handle WebSocket upgrade for the /worlds path
   if (req.url === "/worlds") {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
