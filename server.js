@@ -49,8 +49,8 @@ function broadcastWorldList() {
 }
 
 // --- NEW: API Endpoint for world list as JSON. ---
-// This handles the GET http://localhost:10000/game-api/v2/worlds request.
-app.get("/game-api/v2/worlds", (req, res) => {
+// This handles the GET request for the world list. The path is now /game-api/worlds
+app.get("/game-api/worlds", (req, res) => {
   res.json({ worlds: getWorldList() });
 });
 
@@ -65,16 +65,14 @@ app.get("/", (req, res) => {
 
 // Upgrade WebSocket
 server.on("upgrade", (req, socket, head) => {
-  // Find the world instance based on the URL path.
-  const worldPath = worlds.find(w => req.url.startsWith(w.path));
+  // Find the world instance based on the URL path for the WebSocket connection.
+  // The client will try to connect to a specific world path, e.g., /worlds/fireplane
+  const wssInstance = worldWebSocketServers.get(req.url);
   
-  if (worldPath) {
-    const wssInstance = worldWebSocketServers.get(worldPath.path);
-    if (wssInstance) {
-      wssInstance.handleUpgrade(req, socket, head, (ws) => {
-        wssInstance.emit("connection", ws, req);
-      });
-    }
+  if (wssInstance) {
+    wssInstance.handleUpgrade(req, socket, head, (ws) => {
+      wssInstance.emit("connection", ws, req);
+    });
   } else {
     // If the path doesn't match any world, reject the upgrade
     socket.write("HTTP/1.1 404 Not Found\\r\\n\\r\\n");
