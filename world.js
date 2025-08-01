@@ -1,72 +1,63 @@
-// World.js
-// This class encapsulates the logic for an individual game world.
 const WebSocket = require("ws");
 
+/**
+ * A class representing a single game world.
+ * Each World instance manages its own WebSocket server and player connections.
+ */
 class World {
-  constructor(name, path, icon, maxConnections) {
+  /**
+   * Creates an instance of a World.
+   * @param {string} name The name of the world (e.g., "Fireplane").
+   * @param {string} path The WebSocket path for this world (e.g., "/worlds/fireplane").
+   * @param {string} icon The icon associated with the world.
+   * @param {number} maxConnections The maximum number of players allowed in this world.
+   * @param {Function} playerCountChangeCallback A callback to notify the main server of player count changes.
+   */
+  constructor(name, path, icon, maxConnections, playerCountChangeCallback) {
     this.name = name;
     this.path = path;
     this.icon = icon;
     this.maxConnections = maxConnections;
-    this.players = 0; // Tracks the number of connected players.
-    
-    // Create a new WebSocket server for this specific world.
+    this.players = 0;
+    this.playerCountChangeCallback = playerCountChangeCallback;
+
+    // Create a new WebSocket server instance for this specific world, but don't listen yet.
+    // The main HTTP server will handle the 'upgrade' event for us.
     this.wss = new WebSocket.Server({ noServer: true });
 
-    // Handle incoming connections for this world.
+    // Handle new connections to this world's WebSocket server.
     this.wss.on("connection", (ws) => {
+      console.log(`✅ Player connected to world: ${this.name}`);
       this.players++;
-      console.log(`🌐 Player connected to ${this.name}. Current players: ${this.players}`);
-      
-      // Notify all clients in this world about the player count update.
-      this.broadcastWorldsUpdate();
+      this.playerCountChangeCallback(); // Notify the main server of the player count change
 
-      // Handle messages from the client.
-      ws.on("message", (msg) => {
+      // Listen for messages from this player
+      ws.on("message", (message) => {
         try {
-          const data = JSON.parse(msg);
-          if (data.type === "login" && data.userId) {
-            console.log(`✅ User logged in: ${data.userId}`);
-            // Broadcast a message to all clients about the new player.
-            this.broadcast({ type: "playerJoined", userId: data.userId });
+          const data = JSON.parse(message);
+          // Simple example of handling a message
+          if (data.type === "player_update") {
+            // Broadcast the player update to all other clients in this world.
+            this.wss.clients.forEach(client => {
+              if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(data));
+              }
+            });
           }
         } catch (e) {
-          console.error(`Invalid message received in ${this.name} world:`, e);
+          console.error("Failed to parse message from client:", e);
         }
       });
 
-      // Handle client disconnection.
+      // Handle a player disconnecting from this world
       ws.on("close", () => {
+        console.log(`❌ Player disconnected from world: ${this.name}`);
         this.players--;
-        console.log(`❌ Player disconnected from ${this.name}. Current players: ${this.players}`);
-        this.broadcastWorldsUpdate();
+        this.playerCountChangeCallback(); // Notify the main server of the player count change
       });
-    });
-  }
-
-  // Helper method to send a message to all connected clients in this world.
-  broadcast(message) {
-    this.wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(message));
-      }
-    });
-  }
-  
-  // Sends a message to all clients with the updated world list.
-  broadcastWorldsUpdate() {
-    // Note: The world list would typically be managed by the main server.
-    // For this example, we'll send a simplified update.
-    this.broadcast({ 
-      type: "worldUpdate",
-      world: {
-        name: this.name,
-        path: this.path,
-        icon: this.icon,
-        full: this.players
-      }
     });
   }
 }
 
+// Export the World class so it can be imported by other files.
 module.exports = World;
