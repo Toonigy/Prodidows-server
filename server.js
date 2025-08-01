@@ -50,7 +50,7 @@ function broadcastWorldList() {
 
 // --- NEW: API Endpoint for world list as JSON. ---
 // This handles the GET request for the world list. The path is now /game-api/worlds
-app.get("/game-api/worlds", (req, res) => {
+app.get("/v2/game-api/worlds", (req, res) => {
   res.json({ worlds: getWorldList() });
 });
 
