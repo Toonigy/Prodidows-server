@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const World = require("./World"); // Import the World class.
+const WebSocket = require("ws"); // Import WebSocket for broadcasting
 
 const app = express();
 // Render automatically provides a PORT environment variable.
@@ -13,7 +14,8 @@ const server = http.createServer(app);
 // --- Create and manage your worlds here. ---
 // This is now done by creating instances of the World class.
 const worlds = [
-  new World("Fireplane", "/worlds/fireplane", "fire", 100)
+  // The World constructor now receives a callback function to handle player count changes.
+  new World("Fireplane", "/worlds/fireplane", "fire", 100, () => broadcastWorldList())
 ];
 
 // Map world paths to their corresponding WebSocket server instances.
@@ -21,6 +23,37 @@ const worldWebSocketServers = new Map();
 worlds.forEach(world => {
   worldWebSocketServers.set(world.path, world.wss);
 });
+
+// Helper function to get a standardized list of worlds with current player counts.
+function getWorldList() {
+  return worlds.map(world => ({
+    name: world.name,
+    path: world.path,
+    icon: world.icon,
+    full: world.players // Use the live player count from the World instance.
+  }));
+}
+
+// Function to broadcast the updated world list to all connected clients.
+function broadcastWorldList() {
+  const worldList = getWorldList();
+  // We need to iterate through all worlds and their clients.
+  worlds.forEach(world => {
+    world.wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        // Send a message containing the full, updated world list.
+        client.send(JSON.stringify({ type: "worlds", servers: worldList }));
+      }
+    });
+  });
+}
+
+// --- NEW: API Endpoint for world list as JSON. ---
+// This handles the GET http://localhost:10000/game-api/v2/worlds request.
+app.get("/game-api/v2/worlds", (req, res) => {
+  res.json({ worlds: getWorldList() });
+});
+
 
 // Serve static files from a 'public' folder.
 app.use(express.static(path.join(__dirname, "public")));
