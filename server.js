@@ -1,92 +1,40 @@
-// server.js - A Node.js and Express server with Firebase integration for a real-time world list.
+// server.js - A Node.js and Express server for a multiplayer game world list and WebSocket connections.
+// This version removes the Firebase dependency to resolve the "Cannot find module" error.
 
 const express = require("express");
 const http = require("http");
 const path = require("path");
 const WebSocket = require("ws");
 
-// Import the Firebase client SDKs for app, auth, and firestore.
-const { initializeApp } = require("firebase/app");
-const { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = require("firebase/auth");
-const { getFirestore, collection, onSnapshot, doc, setDoc } = require("firebase/firestore");
-
 const app = express();
+// Use the PORT environment variable provided by platforms like Render, or default to 10000.
 const PORT = process.env.PORT || 10000;
+
+// Create an HTTP server to handle both standard HTTP requests and WebSocket upgrades.
 const server = http.createServer(app);
 
-// --- Firebase Configuration and Initialization ---
-// The `__firebase_config` and `__app_id` globals are provided by the environment.
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-// Initialize Firebase with the provided configuration.
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
-const auth = getAuth(firebaseApp);
-
-let userId = null;
-let isAuthReady = false;
-
-// Authenticate the user. The `__initial_auth_token` is provided by the environment.
-// We listen for the auth state change to ensure we have a valid user ID.
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    userId = user.uid;
-    isAuthReady = true;
-    console.log("✅ Firebase authenticated as user:", userId);
-
-    // After authentication, we can set up the real-time database listener.
-    setupFirestoreListener();
-  } else {
-    // If no user is signed in, sign in anonymously.
-    try {
-      if (typeof __initial_auth_token !== 'undefined') {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    } catch (error) {
-      console.error("🚨 Anonymous sign-in failed:", error);
-    }
+// --- Game World Configuration ---
+// This is a simple, hardcoded list of game worlds.
+const worlds = [
+  {
+    name: "Fireplane",
+    path: "/worlds/fireplane",
+    icon: "fire",
+    full: 0, // Placeholder for player count.
   }
-});
+];
 
 // A Map to store all active WebSocket clients connected to the world list.
 const worldListWssClients = new Map();
 
-// Helper function to broadcast the world list to all connected clients.
-function broadcastWorldList(worldList) {
+// Helper function to broadcast the hardcoded world list to all connected clients.
+function broadcastWorldList() {
+  const worldList = worlds;
   // Iterate through all connected clients and send the updated list.
   worldListWssClients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
-      // The `servers` key is used to be consistent with the original client-side code.
       ws.send(JSON.stringify({ type: "worlds", servers: worldList }));
     }
-  });
-}
-
-// Set up the Firestore listener for the world list.
-function setupFirestoreListener() {
-  if (!isAuthReady) {
-    console.warn("⚠️ Firebase authentication is not ready. Skipping Firestore listener setup.");
-    return;
-  }
-
-  // Define the collection path for the public world list.
-  // This path follows the security rule guidelines for shared, public data.
-  const worldListCollectionPath = `/artifacts/${appId}/public/data/worlds`;
-  const worldsCollection = collection(db, worldListCollectionPath);
-
-  // Use a real-time listener (`onSnapshot`) to get updates whenever the data changes.
-  onSnapshot(worldsCollection, (snapshot) => {
-    const worldList = [];
-    snapshot.forEach((doc) => {
-      worldList.push({ id: doc.id, ...doc.data() });
-    });
-    console.log("🔥 Worlds data updated. Broadcasting to clients.");
-    broadcastWorldList(worldList);
-  }, (error) => {
-    console.error("🚨 Error listening to worlds collection:", error);
   });
 }
 
@@ -107,24 +55,11 @@ server.on("upgrade", (req, socket, head) => {
         worldListWssClients.delete(ws);
       });
 
-      // Once a client connects, we need to immediately send them the current
-      // state of the world list. The `onSnapshot` listener will handle
-      // subsequent updates.
-      if (isAuthReady) {
-        const worldListCollectionPath = `/artifacts/${appId}/public/data/worlds`;
-        onSnapshot(collection(db, worldListCollectionPath), (snapshot) => {
-          const worldList = [];
-          snapshot.forEach((doc) => {
-            worldList.push({ id: doc.id, ...doc.data() });
-          });
-          // This will only be called once for the initial data,
-          // then the main listener handles all future updates.
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "worlds", servers: worldList }));
-          }
-        }, (error) => {
-          console.error("🚨 Error getting initial world list:", error);
-        });
+      // Immediately send the current world list to the new client.
+      // A more dynamic application would update this list from a database,
+      // but this version sends a static list to fix the import error.
+      if (ws.readyState === WebSocket.OPEN) {
+        broadcastWorldList();
       }
     });
   } else {
