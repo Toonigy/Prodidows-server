@@ -55,9 +55,9 @@ function broadcastWorldList() {
 }
 
 // --- API Endpoints ---
-// This handles the GET request for the world list. The path is now corrected to /game-api/worlds
-// to match the client-side request.
-app.get("/game-api/worlds", (req, res) => {
+// This handles the GET request for the world list. The path is now corrected to /game-api/v2/worlds
+// to match the client's request.
+app.get("/game-api/v2/worlds", (req, res) => {
   res.json({ worlds: getWorldList() });
 });
 
