@@ -55,12 +55,9 @@ function broadcastWorldList() {
 }
 
 // --- API Endpoints ---
-// This handles the GET request for the world list. The path is now corrected to /game-api/v2/worlds
-// to match the client's request.
-app.get("/game-api/v2/worlds", (req, res) => {
-  // CORRECTED: We are now sending the raw array of worlds, not an object with a 'worlds' key.
-  res.json(getWorldList());
-});
+// This section has been updated. The HTTP GET endpoint for `/game-api/v2/worlds`
+// has been removed entirely, as it should be a WebSocket-only path.
+// This ensures that the server does not respond to standard HTTP requests on this route.
 
 // Serve static files from a 'public' folder. This line ensures that files like
 // 'public/js/game.min.js' are available to the browser.
@@ -77,12 +74,30 @@ server.on("upgrade", (req, socket, head) => {
   // Find the correct World instance's WebSocket server based on the URL path.
   // The client is expected to connect to a path like `/worlds/fireplane`.
   const wssInstance = worldWebSocketServers.get(req.url);
+  // An additional check for the `/game-api/v2/worlds` path to handle the world list websocket.
+  const isWorldListPath = req.url === "/game-api/v2/worlds";
 
-  if (wssInstance) {
-    // If a matching world is found, handle the upgrade and emit a 'connection' event.
-    wssInstance.handleUpgrade(req, socket, head, (ws) => {
-      wssInstance.emit("connection", ws, req);
-    });
+  if (wssInstance || isWorldListPath) {
+    let targetWss = wssInstance;
+    if (isWorldListPath) {
+      // Create a temporary WebSocket server instance for the world list.
+      // In a more complex app, this would be a persistent WSS instance.
+      targetWss = new WebSocket.Server({ noServer: true });
+      targetWss.on("connection", ws => {
+        console.log("🌐 Client connected to /game-api/v2/worlds");
+        // Send the initial world list immediately upon connection.
+        ws.send(JSON.stringify(getWorldList()));
+      });
+      // Handle the upgrade for this specific path.
+      targetWss.handleUpgrade(req, socket, head, (ws) => {
+        targetWss.emit("connection", ws, req);
+      });
+    } else {
+      // Handle the upgrade for the specific world path.
+      wssInstance.handleUpgrade(req, socket, head, (ws) => {
+        wssInstance.emit("connection", ws, req);
+      });
+    }
   } else {
     // If the path doesn't match any world, reject the upgrade with a 404 error.
     socket.write("HTTP/1.1 404 Not Found\\r\\n\\r\\n");
