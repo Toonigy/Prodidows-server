@@ -36,10 +36,17 @@ const firebaseAdminConfig = {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// Initialize the Admin SDK with a service account, which allows for full access.
-admin.initializeApp({
-  credential: admin.credential.cert(firebaseAdminConfig)
-});
+try {
+  // Initialize the Admin SDK with a service account, which allows for full access.
+  admin.initializeApp({
+    credential: admin.credential.cert(firebaseAdminConfig)
+  });
+} catch (error) {
+  console.error("🚨 FATAL ERROR: Firebase Admin SDK initialization failed.", error);
+  // It's important to exit if the app can't connect to Firebase.
+  process.exit(1);
+}
+
 
 // Get a reference to the Firestore database.
 const db = admin.firestore();
@@ -50,62 +57,58 @@ const worldListCollectionPath = `/artifacts/${appId}/public/data/worlds`;
 const worldsCollection = db.collection(worldListCollectionPath);
 
 // Use a real-time listener (`onSnapshot`) to get updates whenever the data changes.
-worldsCollection.onSnapshot(snapshot => {
-  const worldList = [];
-  snapshot.forEach(doc => {
-    worldList.push({ id: doc.id, ...doc.data() });
-  });
-
-  console.log("🔥 Worlds data updated in Firestore. Broadcasting to clients.");
-  // Broadcast the new world list to all connected clients.
-  worldListWssClients.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "worlds", servers: worldList }));
-    }
-  });
-}, err => {
-  console.error("🚨 Error listening to worlds collection:", err);
-});
-
-
-// --- NEW: HTTP GET endpoint for the world list ---
-// This handles the standard GET request that your jQuery code is likely making.
-app.get("/game-api/v2/worlds", (req, res) => {
-  console.log("📄 Received a GET request for the world list.");
-  worldsCollection.get().then(snapshot => {
+try {
+  worldsCollection.onSnapshot(snapshot => {
     const worldList = [];
     snapshot.forEach(doc => {
       worldList.push({ id: doc.id, ...doc.data() });
     });
-    // Send the world list back as a JSON response.
+    console.log("🔥 Worlds data updated in Firestore. Broadcasting to clients.");
+    worldListWssClients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "worlds", servers: worldList }));
+      }
+    });
+  }, err => {
+    console.error("🚨 Error listening to worlds collection:", err);
+  });
+} catch (error) {
+  console.error("🚨 An error occurred while setting up the Firestore listener:", error);
+}
+
+// --- NEW: HTTP GET endpoint for the world list ---
+// This handles the standard GET request that your jQuery code is likely making.
+app.get("/game-api/v2/worlds", async (req, res) => {
+  console.log("📄 Received a GET request for the world list.");
+  try {
+    const snapshot = await worldsCollection.get();
+    const worldList = [];
+    snapshot.forEach(doc => {
+      worldList.push({ id: doc.id, ...doc.data() });
+    });
     res.json({ worlds: worldList });
-  }).catch(err => {
+  } catch (err) {
+    // This is the key change: logging the full error object for better debugging.
     console.error("🚨 Error getting world list for GET request:", err);
     res.status(500).send("Internal Server Error");
-  });
+  }
 });
 
 
 // --- WebSocket Upgrade Handler ---
 // This listens for HTTP "upgrade" requests to establish a WebSocket connection.
 server.on("upgrade", (req, socket, head) => {
-  // Check if the request is for the world list WebSocket path.
   if (req.url === "/game-api/v2/worlds") {
     const wss = new WebSocket.Server({ noServer: true });
-    wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.handleUpgrade(req, socket, head, async (ws) => {
       console.log("🌐 Client connected to /game-api/v2/worlds");
-
-      // Add the new client to our map of active clients.
       worldListWssClients.set(ws, ws);
-
       ws.on("close", () => {
         console.log("❌ Client disconnected from world list.");
         worldListWssClients.delete(ws);
       });
-
-      // Once a client connects, immediately send them the current
-      // state of the world list.
-      worldsCollection.get().then(snapshot => {
+      try {
+        const snapshot = await worldsCollection.get();
         const worldList = [];
         snapshot.forEach(doc => {
           worldList.push({ id: doc.id, ...doc.data() });
@@ -113,12 +116,11 @@ server.on("upgrade", (req, socket, head) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "worlds", servers: worldList }));
         }
-      }).catch(err => {
-        console.error("🚨 Error getting initial world list:", err);
-      });
+      } catch (err) {
+        console.error("🚨 Error getting initial world list for WebSocket:", err);
+      }
     });
   } else {
-    // If the path doesn't match, reject the upgrade.
     socket.write("HTTP/1.1 404 Not Found\\r\\n\\r\\n");
     socket.destroy();
   }
