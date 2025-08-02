@@ -58,7 +58,8 @@ function broadcastWorldList() {
 // This handles the GET request for the world list. The path is now corrected to /game-api/v2/worlds
 // to match the client's request.
 app.get("/game-api/v2/worlds", (req, res) => {
-  res.json({ worlds: getWorldList() });
+  // CORRECTED: We are now sending the raw array of worlds, not an object with a 'worlds' key.
+  res.json(getWorldList());
 });
 
 // Serve static files from a 'public' folder. This line ensures that files like
