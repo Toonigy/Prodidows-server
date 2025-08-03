@@ -1,26 +1,19 @@
-// server.js - Conceptual example for a server with WSS (Secure WebSockets).
-// NOTE: This code is for demonstration and will not run without valid SSL/TLS certificates.
+// server.js - A Node.js and Express server configured to work with cloud hosting services like Render.
+// The service handles the SSL/TLS certificate, so we use a standard HTTP server.
 
 const express = require("express");
-const https = require("https"); // We use the secure 'https' module instead of 'http'
-const fs = require("fs"); // 'fs' is used to read the certificate files.
+const http = require("http"); // Reverted to the standard 'http' module.
 const WebSocket = require("ws");
 const path = require("path");
 
 const app = express();
+// Use the PORT environment variable provided by platforms like Render, or default to 10000.
 const PORT = process.env.PORT || 10000;
 
-// --- Load SSL/TLS certificate files ---
-// In a real application, you would replace these paths with your actual certificate files.
-const options = {
-  key: fs.readFileSync("/path/to/your/private.key"),
-  cert: fs.readFileSync("/path/to/your/certificate.crt")
-};
+// Create a standard HTTP server to handle both standard HTTP requests and WebSocket upgrades.
+const server = http.createServer(app);
 
-// Create a secure HTTPS server using the certificate options.
-const server = https.createServer(options, app);
-
-// --- Game World Configuration (same as before) ---
+// --- Game World Configuration ---
 const worlds = [
   {
     id: "fireplane",
@@ -43,7 +36,7 @@ const worlds = [
 const worldWebSocketServers = new Map();
 const worldListWss = new WebSocket.Server({ noServer: true });
 
-// --- WebSocket Logic (same as before, but the server is now HTTPS) ---
+// --- WebSocket Logic ---
 worldListWss.on("connection", (ws, req) => {
   console.log(`🌐 Client connected to world list: ${req.socket.remoteAddress}`);
   ws.send(JSON.stringify({ type: "worlds", servers: worlds }));
@@ -107,7 +100,8 @@ app.get("/", (req, res) => {
 });
 
 // --- HTTP Server Upgrade Logic for WebSockets ---
-// The logic here remains the same, but it's now attached to the secure server.
+// This logic is unchanged. The hosting service will forward a secure WSS connection
+// as a standard WebSocket upgrade request to our HTTP server.
 server.on("upgrade", (req, socket, head) => {
   if (req.url === "/game-api/worlds") {
     worldListWss.handleUpgrade(req, socket, head, (ws) => {
@@ -127,5 +121,5 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server listening securely on https://localhost:${PORT}`);
+  console.log(`Server listening on http://localhost:${PORT}`);
 });
