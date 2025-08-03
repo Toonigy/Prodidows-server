@@ -1,72 +1,62 @@
 // World.js
-// This class encapsulates the logic for an individual game world.
+// This class encapsulates the logic for a single game world.
+// It manages its own WebSocket server and client connections.
+
 const WebSocket = require("ws");
 
 class World {
-  constructor(name, path, icon, maxConnections) {
-    this.name = name;
-    this.path = path;
-    this.icon = icon;
-    this.maxConnections = maxConnections;
-    this.players = 0; // Tracks the number of connected players.
-    
-    // Create a new WebSocket server for this specific world.
-    this.wss = new WebSocket.Server({ noServer: true });
+    constructor(name, path, icon, maxConnections, broadcastUpdateCallback) {
+        // --- World Properties ---
+        this.name = name;
+        this.path = path;
+        this.icon = icon;
+        this.maxConnections = maxConnections;
+        this.players = 0;
+        this.broadcastUpdateCallback = broadcastUpdateCallback;
 
-    // Handle incoming connections for this world.
-    this.wss.on("connection", (ws) => {
-      this.players++;
-      console.log(`🌐 Player connected to ${this.name}. Current players: ${this.players}`);
-      
-      // Notify all clients in this world about the player count update.
-      this.broadcastWorldsUpdate();
+        // --- WebSocket Server for this specific World ---
+        // We create a WebSocket server instance for this world but don't
+        // attach it to a running HTTP server yet. The main server.js file
+        // will handle the "upgrade" event and pass it to this instance.
+        this.wss = new WebSocket.Server({ noServer: true });
 
-      // Handle messages from the client.
-      ws.on("message", (msg) => {
-        try {
-          const data = JSON.parse(msg);
-          if (data.type === "login" && data.userId) {
-            console.log(`✅ User logged in: ${data.userId}`);
-            // Broadcast a message to all clients about the new player.
-            this.broadcast({ type: "playerJoined", userId: data.userId });
-          }
-        } catch (e) {
-          console.error(`Invalid message received in ${this.name} world:`, e);
-        }
-      });
+        // A Map to store the clients connected to this specific world
+        this.clients = new Map();
 
-      // Handle client disconnection.
-      ws.on("close", () => {
-        this.players--;
-        console.log(`❌ Player disconnected from ${this.name}. Current players: ${this.players}`);
-        this.broadcastWorldsUpdate();
-      });
-    });
-  }
+        // --- WebSocket Event Handlers ---
+        this.wss.on("connection", (ws) => {
+            console.log(`✅ Player connected to world: ${this.name}`);
+            this.players++;
+            this.clients.set(ws, ws);
+            this.broadcastUpdateCallback(); // Notify the main server to update the world list for all clients
 
-  // Helper method to send a message to all connected clients in this world.
-  broadcast(message) {
-    this.wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(message));
-      }
-    });
-  }
-  
-  // Sends a message to all clients with the updated world list.
-  broadcastWorldsUpdate() {
-    // Note: The world list would typically be managed by the main server.
-    // For this example, we'll send a simplified update.
-    this.broadcast({ 
-      type: "worldUpdate",
-      world: {
-        name: this.name,
-        path: this.path,
-        icon: this.icon,
-        full: this.players
-      }
-    });
-  }
+            // When a client sends a message to this world
+            ws.on("message", (message) => {
+                console.log(`📩 Message from ${this.name} client: ${message}`);
+                // Example: Broadcast the message to all other clients in this world
+                this.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        client.send(message);
+                    }
+                });
+            });
+
+            // When a client disconnects from this world
+            ws.on("close", () => {
+                console.log(`❌ Player disconnected from world: ${this.name}`);
+                this.players--;
+                this.clients.delete(ws);
+                this.broadcastUpdateCallback(); // Notify the main server to update the world list
+            });
+        });
+    }
+
+    // A method to handle the WebSocket upgrade request from the main server.
+    handleUpgrade(req, socket, head) {
+        this.wss.handleUpgrade(req, socket, head, (ws) => {
+            this.wss.emit("connection", ws, req);
+        });
+    }
 }
 
 module.exports = World;
