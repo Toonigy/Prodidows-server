@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const WebSocket = require("ws");
+const World = require("./World"); // Import the World class.
 
 const app = express();
 // Use the PORT environment variable provided by platforms like Render, or default to 10000.
@@ -12,38 +13,17 @@ const PORT = process.env.PORT || 10000;
 // Create an HTTP server to handle both standard HTTP requests and WebSocket upgrades.
 const server = http.createServer(app);
 
-// --- Game World Configuration (in-memory state) ---
-// This is a simple, hardcoded list of game worlds.
-// The 'full' property will be dynamically updated based on live connections.
-const worlds = [
-    {
-        name: "Fireplane",
-        path: "/worlds/fireplane",
-        icon: "fire",
-        full: 0,
-        maxPlayers: 100,
-    },
-    {
-        name: "Waterscape",
-        path: "/worlds/waterscape",
-        icon: "water",
-        full: 0,
-        maxPlayers: 100,
-    },
-];
-
 // --- WebSocket Server Instances ---
 // A Map to store the WebSocket server instance for each world path.
 const worldWebSocketServers = new Map();
 
 // A single WebSocket server instance for the world list broadcast.
-// The client for this would be pde1500_status.html, which listens for server updates.
 const worldListWss = new WebSocket.Server({ noServer: true });
 
 // Helper function to broadcast the current world list to all clients of the world list WebSocket.
 function broadcastWorldList() {
-    // Create a new array with a copy of the current state of each world
-    const updatedWorlds = worlds.map(w => ({ ...w }));
+    // Get the simplified data from each World instance for broadcasting.
+    const updatedWorlds = worlds.map(world => world.getBroadcastData());
 
     // Send the updated list to every client connected to the world list WebSocket.
     worldListWss.clients.forEach((client) => {
@@ -54,33 +34,15 @@ function broadcastWorldList() {
 }
 
 // --- Dynamic WebSocket Server Creation for Each World ---
-// We create a separate WebSocket server for each world defined in our array.
+// Create instances of the World class. Each instance manages its own WebSocket server.
+const worlds = [
+    new World("Fireplane", "/worlds/fireplane", "fire", 100, broadcastWorldList),
+    new World("Waterscape", "/worlds/waterscape", "water", 100, broadcastWorldList),
+];
+
+// Populate the map with the WebSocket servers from each World instance.
 worlds.forEach(world => {
-    const wss = new WebSocket.Server({ noServer: true });
-
-    // Handle new connections to this specific world.
-    wss.on("connection", (ws) => {
-        // Increment player count and broadcast the change.
-        world.full++;
-        console.log(`🌐 Player connected to ${world.name}. Current players: ${world.full}`);
-        broadcastWorldList();
-
-        // Handle messages from this player (not fully implemented in this example).
-        ws.on("message", (message) => {
-            console.log(`📩 Received message from ${world.name} client:`, message.toString());
-        });
-
-        // Handle player disconnections from this specific world.
-        ws.on("close", () => {
-            // Decrement player count and broadcast the change.
-            world.full--;
-            console.log(`❌ Player disconnected from ${world.name}. Current players: ${world.full}`);
-            broadcastWorldList();
-        });
-    });
-
-    // Store the WebSocket server instance in our map, indexed by its path.
-    worldWebSocketServers.set(world.path, wss);
+    worldWebSocketServers.set(world.path, world.wss);
 });
 
 // --- HTTP Server Upgrade Logic for WebSockets ---
