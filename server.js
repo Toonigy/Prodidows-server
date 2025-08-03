@@ -1,130 +1,151 @@
+// server.js - A Node.js and Express server with two WebSocket servers:
+// one for the global world list and one for a specific game world.
+
 const express = require("express");
 const http = require("http");
+const WebSocket = require("ws");
 const path = require("path");
-const World = require("./World"); // Import the World class.
-const WebSocket = require("ws"); // Import WebSocket for broadcasting
-
-// --- NEW: Firebase Admin SDK imports and setup ---
-const admin = require("firebase-admin");
-// IMPORTANT: You will need to ensure this path is correct in your Render deployment.
-// It should point to where you've stored the service account key.
-const serviceAccount = require("./prodidows-backend-firebase-adminsdk-fbsvc-fd603bf56e.json");
-
-// Initialize Firebase Admin SDK
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  // IMPORTANT: Replace this with your actual database URL from the Firebase Console
-  databaseURL: "https://prodidows-backend.firebaseio.com"
-});
-
-const db = admin.firestore();
 
 const app = express();
-// Render automatically provides a PORT environment variable.
 const PORT = process.env.PORT || 10000;
-
 const server = http.createServer(app);
 
-// Map world paths to their corresponding WebSocket server instances.
-const worldWebSocketServers = new Map();
-
-// --- NEW: Asynchronous function to get world list from Firestore ---
-// This function now reads directly from the database
-async function getWorlds() {
-  const worldList = [];
-  try {
-    // IMPORTANT: Replace 'YOUR_APP_ID' with the actual document ID you created in the 'artifacts' collection
-    const worldsRef = db.collection('artifacts').doc('YOUR_APP_ID').collection('public').doc('data').collection('worlds');
-    const snapshot = await worldsRef.get();
-    
-    if (snapshot.empty) {
-      console.log('No worlds found in Firestore.');
-      return [];
-    }
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      worldList.push({
-        name: data.name,
-        path: data.path,
-        icon: data.icon,
-        full: data.full // Use the live player count from the database
-      });
-    });
-    return worldList;
-
-  } catch (error) {
-    console.error('🚨 Error getting world list from Firestore:', error);
-    throw error; // Re-throw the error to be handled by the caller
-  }
-}
-
-// Function to broadcast the updated world list to all connected clients.
-// This function is now async to handle the database call.
-async function broadcastWorldList() {
-  try {
-    const worldList = await getWorlds();
-    // We need to iterate through all WebSocket clients and send the updated list.
-    // This is a placeholder for a more robust broadcasting system.
-    worldWebSocketServers.forEach(wssInstance => {
-      wssInstance.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: "worlds", servers: worldList }));
-        }
-      });
-    });
-  } catch (error) {
-    console.error("🚨 Failed to broadcast world list:", error);
-  }
-}
-
-// --- World class instances and WebSocket handling remain the same ---
-// Create and manage your worlds here.
+// --- Game World Configuration ---
+// This is a simple, hardcoded list of game worlds.
+// In a real application, this would likely be managed in a database.
 const worlds = [
-  // The World constructor now receives a callback function to handle player count changes.
-  new World("Fireplane", "/worlds/fireplane", "fire", 100, () => broadcastWorldList())
+  {
+    id: "fireplane",
+    name: "Fireplane",
+    path: "/worlds/fireplane",
+    region: "us",
+    connectionCount: 0,
+    maxConnections: 100,
+  },
+  {
+    id: "waterscape",
+    name: "Waterscape",
+    path: "/worlds/waterscape",
+    region: "eu",
+    connectionCount: 0,
+    maxConnections: 100,
+  },
 ];
 
-worlds.forEach(world => {
-  worldWebSocketServers.set(world.path, world.wss);
+// A Map to store WebSocket server instances for each individual world.
+// The key is the world's path (e.g., "/worlds/fireplane")
+const worldWebSocketServers = new Map();
+
+// A separate WebSocket server for the world list.
+// This is used to broadcast the list of available worlds to all clients.
+const worldListWss = new WebSocket.Server({ noServer: true });
+
+// --- WebSocket Logic for the World List ---
+worldListWss.on("connection", (ws, req) => {
+  console.log(`🌐 Client connected to world list: ${req.socket.remoteAddress}`);
+
+  // Send the full world list on a new connection.
+  ws.send(JSON.stringify({ type: "worlds", servers: worlds }));
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === "filter" && data.region) {
+        // Handle filter requests for the world list
+        const filtered = worlds.filter((s) => s.region === data.region);
+        ws.send(JSON.stringify({ type: "filteredList", servers: filtered }));
+      }
+    } catch (e) {
+      console.error("🚨 Invalid JSON received on world list WebSocket:", e);
+    }
+  });
+  
+  ws.on("close", () => {
+    console.log("❌ Client disconnected from world list.");
+  });
 });
 
-// --- UPDATED: API Endpoint for world list as JSON. ---
-// This now handles the GET request for the world list by calling the async function.
-app.get("/v2/game-api/worlds", async (req, res) => {
-  try {
-    const worlds = await getWorlds();
-    res.json({ worlds });
-  } catch (error) {
-    console.error("🚨 Error getting world list for GET request:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
+// --- WebSocket Logic for Individual Game Worlds ---
+// Create a WebSocket server instance for each world.
+worlds.forEach((world) => {
+  const wss = new WebSocket.Server({ noServer: true });
+
+  wss.on("connection", (ws, req) => {
+    console.log(`🎮 Client connected to world ${world.name}: ${req.socket.remoteAddress}`);
+
+    // Increment player count
+    world.connectionCount++;
+    // Broadcast the updated world list to all clients on the world list server.
+    broadcastWorldListUpdate();
+
+    // Handle messages within the specific game world
+    ws.on("message", (message) => {
+      console.log(`📩 Received message in ${world.name}:`, message.toString());
+      // Here you would implement game-specific logic,
+      // such as broadcasting player movements to other clients in this world.
+    });
+
+    ws.on("close", () => {
+      console.log(`❌ Client disconnected from world ${world.name}.`);
+      // Decrement player count
+      world.connectionCount--;
+      // Broadcast the updated world list again.
+      broadcastWorldListUpdate();
+    });
+  });
+
+  // Map the world's path to its WebSocket server instance.
+  worldWebSocketServers.set(world.path, wss);
 });
 
-// Serve static files from a 'public' folder.
+
+// Helper function to broadcast the world list to all clients connected to the
+// world list WebSocket server.
+function broadcastWorldListUpdate() {
+  // We send the entire, updated `worlds` array.
+  const updatedWorlds = worlds.map(w => ({
+    ...w,
+    path: w.path // Ensure the path is included
+  }));
+
+  worldListWss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: "worlds", servers: updatedWorlds }));
+    }
+  });
+}
+
+// --- Express.js HTTP Server Setup ---
+// Serve static files from the 'public' folder.
 app.use(express.static(path.join(__dirname, "public")));
 
-// Serve `index.html`
+// Serve `index.html` on the root URL.
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Upgrade WebSocket
+// --- HTTP Server Upgrade Logic for WebSockets ---
 server.on("upgrade", (req, socket, head) => {
-  const wssInstance = worldWebSocketServers.get(req.url);
-  
-  if (wssInstance) {
-    wssInstance.handleUpgrade(req, socket, head, (ws) => {
-      wssInstance.emit("connection", ws, req);
+  // Check if the upgrade request is for the world list.
+  if (req.url === "/game-api/worlds") {
+    worldListWss.handleUpgrade(req, socket, head, (ws) => {
+      worldListWss.emit("connection", ws, req);
     });
   } else {
-    // Refuse upgrade for other paths
-    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-    socket.destroy();
+    // Otherwise, check if it's for a specific game world.
+    const wssInstance = worldWebSocketServers.get(req.url);
+    if (wssInstance) {
+      wssInstance.handleUpgrade(req, socket, head, (ws) => {
+        wssInstance.emit("connection", ws, req);
+      });
+    } else {
+      // Refuse upgrade for other paths.
+      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
+    }
   }
 });
 
 server.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
-
