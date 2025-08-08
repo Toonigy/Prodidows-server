@@ -81,7 +81,7 @@ server.on("upgrade", (req, socket, head) => {
     console.log(`🔁 WebSocket upgrade request for ${pathname}`);
 
     // If the request is for the central world list WebSocket
-    if (pathname === "/game-api/world-list") {
+    if (pathname === "/game-api/v2/worlds") {
         worldListWss.handleUpgrade(req, socket, head, (ws) => {
             worldListWss.emit("connection", ws, req); // Emit 'connection' event for the new WebSocket
         });
@@ -100,11 +100,11 @@ server.on("upgrade", (req, socket, head) => {
     }
 });
 
-// ⭐ HTTP Fallback for /world-list (Legacy/Direct Client Request) ⭐
-// This route is crucial to handle direct HTTP GET requests to the root '/world-list' path,
-// which some versions or parts of game.min.js might still be making.
-app.get("/world-list", (req, res) => {
-    console.log("Received HTTP GET request for /world-list (legacy client endpoint)");
+// ⭐ HTTP GET for /game-api/v2/worlds (New Preferred Client Request) ⭐
+// This route handles HTTP GET requests to the '/game-api/v2/worlds' path,
+// which is now the preferred endpoint for the world list.
+app.get("/game-api/v2/worlds", (req, res) => {
+    console.log("Received HTTP GET request for /game-api/v2/worlds (preferred client endpoint)");
     const worldsInfo = World.allWorlds.map(w => ({
         id: w.id,
         name: w.name,
@@ -115,25 +115,8 @@ app.get("/world-list", (req, res) => {
         icon: w.icon,
         full: w.full
     }));
-    res.json({ worlds: worldsInfo }); // Respond with the list of worlds in JSON format
-});
-
-// ⭐ HTTP Fallback for /game-api/world-list (Preferred Client Request) ⭐
-// This route handles HTTP GET requests to the '/game-api/world-list' path,
-// which is the preferred endpoint if game.min.js uses the ApiClient's base URL.
-app.get("/game-api/world-list", (req, res) => {
-    console.log("Received HTTP GET request for /game-api/world-list (preferred client endpoint)");
-    const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id,
-        name: w.name,
-        path: w.path,
-        playerCount: w.playerCount,
-        maxPlayers: w.maxPlayers,
-        tag: w.tag,
-        icon: w.icon,
-        full: w.full
-    }));
-    res.json({ worlds: worldsInfo }); // Respond with the list of worlds in JSON format
+    // ⭐ IMPORTANT CHANGE: Send the array directly, not wrapped in an object. ⭐
+    res.json(worldsInfo); // Respond with the list of worlds as a direct JSON array
 });
 
 // ⭐ HTTP GET for /game-api/status ⭐
@@ -147,7 +130,7 @@ app.get("/game-api/status", (req, res) => {
 // Start the HTTP server and listen on the specified port.
 server.listen(PORT, () => {
     console.log(`Server is listening on port ${PORT}...`);
-    console.log(`🌐 World list WebSocket is online and ready at ws://localhost:${PORT}/game-api/world-list`);
+    console.log(`🌐 World list WebSocket is online and ready at ws://localhost:${PORT}/game-api/v2/worlds`);
     // Log the WebSocket paths for individual worlds for easy debugging.
     World.allWorlds.forEach(world => {
         console.log(`🌍 World "${world.name}" WebSocket ready at ws://localhost:${PORT}${world.path}`);
