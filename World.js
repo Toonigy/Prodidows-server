@@ -1,54 +1,48 @@
 // World.js
 
 class World {
-    constructor(name, ownerId, maxPlayers, tag, path, icon, full = 0) {
+    // Added 'path' to constructor, removed 'full' as it's a getter
+    constructor(name, ownerId, maxPlayers, tag, icon, path) {
         this.name = name;
-        this.id = name.toLowerCase().replace(/\s/g, '-');
-        this.ownerId = ownerId;
-        this.maxPlayers = maxPlayers;
+        this.id = name.toLowerCase().replace(/\s/g, '-'); // Automatically generate ID
+        this.ownerId = ownerId; // Owner ID for this world
+        this.maxPlayers = maxPlayers; // Maximum players allowed in this world
         this.tag = tag;
-        this.path = path; // Store the path for WebSocket connections
-        this.icon = icon; // Store the icon name
-        this.full = full; // 0: available, 1: almost full, 2: full
+        this.icon = icon; // Icon for the world (e.g., "fire", "ice")
+        this.path = path; // ⭐ NEW: Explicit path for the world
 
         this.players = {}; // { userId: { zone, socket } }
-        this.playerCount = 0;
+        this.playerCount = 0; // Current number of players in the world
     }
 
     /**
-     * Handles a new WebSocket connection from a client.
-     * @param {WebSocket} socket
-     * @param {URLSearchParams} query (from "?userId=...&zone=...")
+     * Getter for the 'full' status, calculated as a percentage.
+     * This will provide a value from 0 to 100, which game.min.js expects.
+     * @returns {number} Percentage of world fullness (0-100).
      */
-    handleConnection(socket, query) {
-        const userId = query.get("userId");
-        const zone = query.get("zone") || "unknown";
-
-        if (!userId) {
-            socket.close();
-            return;
+    get full() {
+        if (this.maxPlayers === 0) {
+            return 0; // Avoid division by zero if maxPlayers is 0
         }
-
-        const added = this.addPlayer(userId, zone, socket);
-        if (!added) {
-            socket.send(JSON.stringify({ code: 503, message: "World is full" }));
-            socket.close();
-            return;
-        }
-
-        // Send player list to the new client
-        socket.send(JSON.stringify({
-            type: "playerList",
-            payload: this.getPlayerList()
-        }));
-
-        // Notify others
-        this.broadcastExcept(userId, "playerJoined", userId);
-
-        console.log(`Player ${userId} joined world: ${this.name} in zone: ${zone}. Current players: ${this.playerCount}/${this.maxPlayers}`);
+        return Math.min(100, Math.floor((this.playerCount / this.maxPlayers) * 100));
     }
 
+    /**
+     * Adds a player to the world.
+     * @param {string} userId - The ID of the user.
+     * @param {string} zone - The zone the player is in.
+     * @param {WebSocket} socket - The WebSocket connection for the player.
+     * @returns {boolean} True if the player was added, false if the world is full or player already exists.
+     */
     addPlayer(userId, zone, socket) {
+        if (this.players[userId]) {
+            // Player already exists, close existing socket and update
+            console.log(`Player ${userId} already in world ${this.name}, updating connection.`);
+            this.players[userId].socket.close(); // Close old connection
+            delete this.players[userId];
+            this.playerCount--;
+        }
+
         if (this.playerCount >= this.maxPlayers) {
             return false;
         }
@@ -58,6 +52,11 @@ class World {
         return true;
     }
 
+    /**
+     * Removes a player from the world.
+     * @param {string} userId - The ID of the user to remove.
+     * @returns {boolean} True if the player was removed, false if not found.
+     */
     removePlayer(userId) {
         if (!this.players[userId]) return false;
 
@@ -71,15 +70,26 @@ class World {
         return true;
     }
 
+    /**
+     * Broadcasts a message to all players in the world.
+     * @param {string} type - The type of message.
+     * @param {object} payload - The message payload.
+     */
     broadcast(type, payload) {
         const message = JSON.stringify({ type, payload });
         for (const { socket } of Object.values(this.players)) {
-            if (socket.readyState === 1) {
+            if (socket.readyState === 1) { // Check if socket is open
                 socket.send(message);
             }
         }
     }
 
+    /**
+     * Broadcasts a message to all players in the world except one.
+     * @param {string} excludeUserId - The ID of the user to exclude from the broadcast.
+     * @param {string} type - The type of message.
+     * @param {object} payload - The message payload.
+     */
     broadcastExcept(excludeUserId, type, payload) {
         const message = JSON.stringify({ type, payload });
         for (const [uid, { socket }] of Object.entries(this.players)) {
@@ -89,31 +99,56 @@ class World {
         }
     }
 
+    /**
+     * Gets a list of user IDs currently in the world.
+     * @returns {string[]} An array of user IDs.
+     */
     getPlayerList() {
         return Object.keys(this.players);
     }
 
+    /**
+     * Updates a player's position and broadcasts it to others.
+     * @param {string} userId - The ID of the user whose position is being updated.
+     * @param {number} x - The new X coordinate.
+     * @param {number} y - The new Y coordinate.
+     */
+    updatePlayerPosition(userId, x, y) {
+        if (this.players[userId]) {
+            this.players[userId].x = x;
+            this.players[userId].y = y;
+            // Broadcast the updated position to all other players in this world
+            this.broadcastExcept(userId, "playerMoved", { userId, x, y });
+        }
+    }
+
+    /**
+     * Returns data about the world suitable for broadcasting or listing.
+     * This now includes 'icon' and the dynamically calculated 'full' property.
+     * @returns {object} World data.
+     */
     getBroadcastData() {
         return {
+            id: this.id, // Include ID for client-side use
             name: this.name,
-            path: this.path,
-            playerCount: this.playerCount,
-            maxPlayers: this.maxPlayers,
-            tag: this.tag,
+            path: this.path, // ⭐ UPDATED: Use the explicit path
             icon: this.icon,
-            full: this.full
+            playerCount: this.playerCount, // Include current player count
+            maxPlayers: this.maxPlayers, // Include max players
+            tag: this.tag,
+            full: this.full // Now uses the dynamic getter
         };
     }
-}
 
-// ⭐ IMPORTANT CHANGE: Define World.allWorlds explicitly after the class declaration ⭐
-// This ensures the static property is assigned to the World class object before it's exported.
-World.allWorlds = [
-    new World("Forest Glade", "admin", 10, "Adventure", "/game-api/world/forest-glade", "tree", 0),
-    new World("Desert Oasis", "admin", 5, "Survival", "/game-api/world/desert-oasis", "cactus", 0),
-    new World("Mountain Peak", "admin", 2, "Challenge", "/game-api/world/mountain-peak", "mountain", 2), // Example of a full world
-    new World("Underwater City", "admin", 8, "Exploration", "/game-api/world/underwater-city", "fish", 0),
-    new World("Volcanic Caverns", "admin", 4, "Danger", "/game-api/world/volcanic-caverns", "volcano", 1) // Example of an almost full world
-];
+    // Static property to hold all defined worlds.
+    // Constructor arguments: name, ownerId, maxPlayers, tag, icon, path
+    static allWorlds = [
+        // ⭐ ADDED: Fireplane world ⭐
+        new World("Fireplane", "admin", 50, "adventure", "fire", "/worlds/fireplane"),
+        new World("Ice Caverns", "admin", 30, "dungeon", "ice", "/worlds/ice-caverns"),
+        new World("Sky Sanctuary", "admin", 40, "quest", "sky", "/worlds/sky-sanctuary"),
+        new World("Deep Woods", "admin", 60, "explore", "tree", "/worlds/deep-woods")
+    ];
+}
 
 module.exports = World;
