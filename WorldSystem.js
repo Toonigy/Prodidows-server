@@ -1,67 +1,88 @@
 // WorldSystem.js
-
-// ⭐⭐⭐ IMPORTANT: Ensure this line is at the very top of your file ⭐⭐⭐
 const WebSocket = require("ws");
+const World = require("./World"); // Ensure World class is imported
 
-class WorldSystem {
+class WorldSystem extends WebSocket.Server {
     constructor(world) {
-        this.world = world;
+        super({ noServer: true }); // Initialize WebSocket.Server without attaching to HTTP server yet
+        this.world = world; // Store the World instance this system manages
 
-        // Create a new WebSocket.Server instance for this specific world.
-        // It's crucial that this server is created with `noServer: true`
-        // and then hooked up to the main HTTP server's 'upgrade' event.
-        this.wss = new WebSocket.Server({ noServer: true });
+        console.log(`🌍 WorldSystem: Initializing for world "${this.world.name}" (Path: ${this.world.path})`);
 
-        // Add a console log to confirm that this.wss is initialized
-        if (this.wss) {
-            console.log(`✅ WebSocket Server initialized for world: ${world.name}`);
-        } else {
-            // This error should ideally not happen if 'require("ws")' is correct.
-            console.error(`❌ Failed to initialize WebSocket Server for world: ${world.name}. Is 'ws' package installed and required?`);
-        }
+        // --- WebSocket Connection Handling for this specific world ---
+        this.on("connection", (ws, req) => {
+            const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+            const query = parsedUrl.searchParams;
+            const userId = query.get('userId');
+            const zone = query.get('zone');
 
-        // Set up the connection listener for this world's WebSocket server
-        this.wss.on('connection', (ws, req) => {
-            console.log(`🎮 Player connected to world: ${this.world.name}`);
+            if (!userId) {
+                console.warn(`❌ WorldSystem: Connection attempt to "${this.world.name}" rejected. Missing userId in query.`)
+                ws.close(1008, "Missing userId"); // 1008: Policy Violation
+                return;
+            }
 
-            // Add a message listener for this specific client WebSocket
+            console.log(`✅ WorldSystem: Player ${userId} connecting to "${this.world.name}" (Zone: ${zone || 'N/A'})...`);
+
+            // Delegate connection handling to the World instance
+            // World.handleConnection will add the player and send initial data
+            this.world.handleConnection(ws, query);
+
+            // --- Message Listener for this Client WebSocket ---
             ws.on('message', (message) => {
                 try {
-                    const data = JSON.parse(message);
+                    const parsedMessage = JSON.parse(message.toString());
+                    console.log(`➡️ WorldSystem Message: [${this.world.name} - ${userId}] Received type: "${parsedMessage.type}", Payload:`, parsedMessage.payload);
 
-                    // Check if the message is a 'googleSignIn' event
-                    if (data.type === 'googleSignIn' && data.userID) {
-                        console.log(`✅ User ${data.userID} signed in with Google in world: ${this.world.name}`);
-                        // Optionally, you can store the userID directly on the WebSocket object
-                        // for easier access in other parts of your WorldSystem logic.
-                        ws.userID = data.userID;
+                    // Handle different message types from the client
+                    switch (parsedMessage.type) {
+                        case "move":
+                            const { x, y } = parsedMessage.payload;
+                            if (typeof x === 'number' && typeof y === 'number') {
+                                this.world.updatePlayerPosition(userId, x, y);
+                                console.log(`🔄 WorldSystem: Player ${userId} moved to (${x}, ${y}) in ${this.world.name}.`);
+                            } else {
+                                console.warn(`⚠️ WorldSystem: Invalid move payload from ${userId}. Expected {x, y} numbers.`, parsedMessage.payload);
+                            }
+                            break;
+                        case "chat":
+                            if (typeof parsedMessage.payload === 'string' && parsedMessage.payload.trim() !== '') {
+                                this.world.broadcast("chat", { sender: userId, message: parsedMessage.payload });
+                                console.log(`💬 WorldSystem: [${this.world.name} - ${userId}] Chat: "${parsedMessage.payload}"`);
+                            } else {
+                                console.warn(`⚠️ WorldSystem: Invalid chat payload from ${userId}. Expected non-empty string.`, parsedMessage.payload);
+                            }
+                            break;
+                        // Add more cases for other client messages (e.g., actions, interactions)
+                        case "ping":
+                            ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+                            console.log(`⚡ WorldSystem: [${this.world.name} - ${userId}] Ping/Pong.`);
+                            break;
+                        default:
+                            console.warn(`❓ WorldSystem: [${this.world.name} - ${userId}] Unhandled message type: "${parsedMessage.type}"`);
+                            break;
                     }
-                    // You would add other message handling logic here for other game events
-                    // else if (data.type === 'playerMove') { ... }
-                    // else if (data.type === 'chatMessage') { ... }
-
                 } catch (error) {
-                    console.error(`Error parsing message in world ${this.world.name}:`, error);
+                    console.error(`💔 WorldSystem Error: [${this.world.name} - ${userId}] Failed to parse or handle message:`, message.toString(), "Error:", error);
+                    // Optionally send an error back to the client
+                    ws.send(JSON.stringify({ type: "error", payload: "Failed to process message." }));
                 }
             });
 
-            // Add a close listener for the client WebSocket
-            ws.on('close', () => {
-                const userId = ws.userID || 'unknown user';
-                console.log(`❌ Player ${userId} disconnected from world: ${this.world.name}`);
+            // --- Close Listener for this Client WebSocket ---
+            ws.on('close', (code, reason) => {
+                console.log(`🔌 WorldSystem Disconnect: [${this.world.name} - ${userId}] Closed. Code: ${code}, Reason: ${reason ? reason.toString() : 'N/A'}`);
+                this.world.removePlayer(userId); // Remove player from the World instance
+                console.log(`🗑️ WorldSystem: Player ${userId} removed from "${this.world.name}". Current players: ${this.world.playerCount}`);
+            });
+
+            // --- Error Listener for this Client WebSocket ---
+            ws.on('error', (error) => {
+                console.error(`💥 WorldSystem Connection Error: [${this.world.name} - ${userId}] WebSocket error:`, error);
+                // The 'close' event will usually follow an 'error' event
             });
         });
-
-        // This method is called by server.js during the 'upgrade' event
-        // to delegate the WebSocket connection to this specific WorldSystem.
-        this.handleUpgrade = (req, socket, head, callback) => {
-            this.wss.handleUpgrade(req, socket, head, callback);
-        };
-
-        // ... rest of your WorldSystem constructor/initialization ...
     }
-
-    // ... other methods of your WorldSystem class ...
 }
 
-module.exports = WorldSystem; // Ensure WorldSystem is exported
+module.exports = WorldSystem;
