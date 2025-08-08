@@ -1,15 +1,18 @@
 // server.js - Node.js + Express server for multiplayer game worlds and WebSocket API
 
+// Core Node.js and Express imports
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const path = require("path");
-const WebSocket = require("ws");
+const WebSocket = require("ws"); // WebSocket library for raw WS connections
 
-// Import the World and WorldSystem classes
+// Custom server-side modules
+// IMPORTANT: Ensure these files exist and contain valid Node.js (server-side) code.
 const World = require("./World");
 const WorldSystem = require("./WorldSystem");
 
+// Initialize Express app
 const app = express();
 // Use the PORT environment variable provided by platforms like Render, or default to 10000.
 const PORT = process.env.PORT || 10000;
@@ -28,25 +31,27 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ⭐ World List WebSocket Server Setup ⭐
+// --- World List WebSocket Server Setup ---
 // This WebSocket server handles connections specifically for the list of available game worlds.
+// Clients (like multiplayer.js) can connect here for real-time world list updates.
 const worldListWss = new WebSocket.Server({ noServer: true });
 
 worldListWss.on("connection", (ws) => {
     console.log("🌐 Client connected to world list WebSocket.");
 
     // When a client connects, send them the initial list of all available worlds.
+    // The data format here should match what game.min.js/multiplayer.js expects.
     ws.send(JSON.stringify({
         type: "worlds",
         servers: World.allWorlds.map(w => ({
             id: w.id,
             name: w.name,
             path: w.path,
-            playerCount: w.playerCount, // Include current player count for display
-            maxPlayers: w.maxPlayers,   // Include max players for display
-            tag: w.tag,                 // Include tags for filtering/display
-            icon: w.icon,               // Include icon for visual representation
-            full: w.full                // Include full status (0: available, 1: almost full, 2: full)
+            playerCount: w.playerCount,
+            maxPlayers: w.maxPlayers,
+            tag: w.tag,
+            icon: w.icon,
+            full: w.full
         }))
     }));
 
@@ -61,78 +66,86 @@ worldListWss.on("connection", (ws) => {
     });
 });
 
-// ⭐ Individual World WebSocket Servers Setup ⭐
+// --- Individual World WebSocket Servers Setup ---
 // A Map to store WebSocketServer instances for each individual game world.
 const worldWebSocketMap = new Map();
 
-// Initialize a WorldSystem for each defined world.
+// Initialize a WorldSystem for each defined world from World.allWorlds.
 World.allWorlds.forEach(world => {
+    // Each WorldSystem instance manages a specific World and its connections.
     const system = new WorldSystem(world);
     worldWebSocketMap.set(world.path, system); // Map the world's path to its WorldSystem instance
-    console.log(`🌍 Initialized world: ${world.name} at ws://localhost:${PORT}${world.path}`);
+    console.log(`🌍 Initialized WorldSystem for "${world.name}" at ws://localhost:${PORT}${world.path}`);
 });
 
-// ⭐ WebSocket Upgrade Handler ⭐
-// This handles requests to upgrade a standard HTTP connection to a WebSocket connection.
+// --- WebSocket Upgrade Handler ---
+// This is the core handler that intercepts HTTP requests and upgrades them to WebSockets.
+// It determines which specific WebSocket server (world list or a game world) should handle the connection.
 server.on("upgrade", (req, socket, head) => {
-    // Parse the URL to determine which WebSocket server (world list or individual world) should handle the request.
+    // Parse the URL to determine the target WebSocket path.
     const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
 
-    console.log(`🔁 WebSocket upgrade request for ${pathname}`);
+    console.log(`🔁 WebSocket upgrade request received for path: ${pathname}`);
 
-    // If the request is for the central world list WebSocket
+    // If the request is for the central world list WebSocket (using the v2 endpoint)
     if (pathname === "/game-api/v2/worlds") {
         worldListWss.handleUpgrade(req, socket, head, (ws) => {
-            worldListWss.emit("connection", ws, req); // Emit 'connection' event for the new WebSocket
+            worldListWss.emit("connection", ws, req); // Hand over to the world list WSS
         });
     }
     // If the request is for an individual game world WebSocket
     else if (worldWebSocketMap.has(pathname)) {
         const wss = worldWebSocketMap.get(pathname);
         wss.handleUpgrade(req, socket, head, (ws) => {
-            wss.emit("connection", ws, req); // Emit 'connection' event for the new WebSocket
+            wss.emit("connection", ws, req); // Hand over to the specific WorldSystem's WSS
         });
     }
-    // If no matching WebSocket path is found, return a 404 Not Found response.
+    // If no matching WebSocket path is found, return a 404 Not Found HTTP response.
     else {
+        console.warn(`❌ WebSocket upgrade: 404 Not Found for path: ${pathname}`);
         socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-        socket.destroy();
+        socket.destroy(); // Close the socket
     }
 });
 
-// ⭐ HTTP GET for /game-api/v2/worlds (New Preferred Client Request) ⭐
-// This route handles HTTP GET requests to the '/game-api/v2/worlds' path,
-// which is now the preferred endpoint for the world list.
-app.get("/game-api/v2/worlds", (req, res) => {
-    console.log("Received HTTP GET request for /game-api/v2/worlds (preferred client endpoint)");
-    const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id,
-        name: w.name,
-        path: w.path,
-        playerCount: w.playerCount,
-        maxPlayers: w.maxPlayers,
-        tag: w.tag,
-        icon: w.icon,
-        full: w.full
-    }));
-    // ⭐ IMPORTANT CHANGE: Send the array directly, not wrapped in an object. ⭐
-    res.json(worldsInfo); // Respond with the list of worlds as a direct JSON array
+// --- HTTP GET Endpoints for Compatibility (XHR) ---
+// These routes handle standard HTTP GET requests, important for clients
+// that might still use XMLHttpRequest (XHR) to fetch data (like game.min.js).
+
+// Legacy endpoint for compatibility
+app.get("/world-list", (req, res) => {
+    console.log("Received HTTP GET request for /world-list (legacy endpoint)");
+    // Respond with the list of worlds as a direct JSON array
+    res.json(World.allWorlds.map(w => ({
+        id: w.id, name: w.name, path: w.path, playerCount: w.playerCount,
+        maxPlayers: w.maxPlayers, tag: w.tag, icon: w.icon, full: w.full
+    })));
 });
 
-// ⭐ HTTP GET for /game-api/status ⭐
-// Handles the /status endpoint as expected by ApiClient.
+// Preferred HTTP endpoint for the world list (matches WS endpoint)
+app.get("/game-api/v2/worlds", (req, res) => {
+    console.log("Received HTTP GET request for /game-api/v2/worlds");
+    // Respond with the list of worlds as a direct JSON array
+    res.json(World.allWorlds.map(w => ({
+        id: w.id, name: w.name, path: w.path, playerCount: w.playerCount,
+        maxPlayers: w.maxPlayers, tag: w.tag, icon: w.icon, full: w.full
+    })));
+});
+
+// Status endpoint for API client health checks
 app.get("/game-api/status", (req, res) => {
     console.log("Received HTTP GET request for /game-api/status");
     res.json({ status: "ok", message: "Server is running" });
 });
 
-
-// Start the HTTP server and listen on the specified port.
+// --- Start the HTTP Server ---
+// The server will listen on the specified port, keeping the Node.js process alive.
 server.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}...`);
-    console.log(`🌐 World list WebSocket is online and ready at ws://localhost:${PORT}/game-api/v2/worlds`);
-    // Log the WebSocket paths for individual worlds for easy debugging.
+    console.log(`✅ Server is listening on port ${PORT}...`);
+    console.log(`🌐 World list WebSocket ready at ws://localhost:${PORT}/game-api/v2/worlds`);
+    // Log paths for individual world WebSockets.
     World.allWorlds.forEach(world => {
         console.log(`🌍 World "${world.name}" WebSocket ready at ws://localhost:${PORT}${world.path}`);
     });
+    console.log("🚀 Server startup complete. Waiting for connections...");
 });
