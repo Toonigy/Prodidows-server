@@ -1,14 +1,17 @@
 {
-  "name": "your-project",
+  "name": "prodigy-server",
   "version": "1.0.0",
+  "description": "A Node.js server for Prodigy multiplayer game worlds.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "firebase-admin": "^13.4.0",
-    "socket.io": "^4.5.4",
-    "ws": "^8.13.0"
+    "cors": "^2.8.5",
+    "socket.io": "^4.7.5" // ⭐ Add this line if it's not there ⭐
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
