@@ -2,14 +2,14 @@
 
 class World {
     constructor(id, name, ownerId, maxPlayers, tag, icon, path) {
-        this.id = id; // Unique ID for the world (e.g., "fireplane")
+        this.id = id;
         this.name = name;
         this.ownerId = ownerId;
         this.maxPlayers = maxPlayers;
         this.tag = tag;
         this.icon = icon;
         this.path = path;
-        this.players = {}; // Map of userId to {socketId, data}
+        this.players = {}; // Map of userId to {socketId, data, wizardData, x, y}
         this.playerCount = 0;
     }
 
@@ -21,112 +21,221 @@ class World {
     }
 
     /**
+     * Generates specific mock wizard data for a player, using the exact JSON provided.
+     * The userId and zoneId are dynamically inserted into the predefined structure.
+     * @param {string} userId - The unique ID of the player.
+     * @param {string} zoneId - The ID of the zone the player is in.
+     * @returns {object} Mock wizard data as per the provided JSON structure.
+     */
+    _getMockWizardData(userId, zoneId) {
+        // ⭐ Replacing randomized data with the exact JSON structure provided ⭐
+        return {
+            "event": "wizard-update", // This outer 'event' key is typically added by socket.emit, not within the wizard object itself
+            "wizard": {
+                "_id": userId, // Dynamically insert the current userId
+                "userID": userId, // Dynamically insert the current userId
+                "appearance": {
+                    "name": "Bobby Glasslegs",
+                    "gender": "male",
+                    "hairStyle": 4,
+                    "hairColor": 2,
+                    "skinColor": 1,
+                    "eyeColor": 6,
+                    "nick": "Bobby of the Forest"
+                },
+                "equipment": {
+                    "weapon": 77,
+                    "boots": 26,
+                    "outfit": 52,
+                    "hat": 61
+                },
+                "data": {
+                    "settings": {
+                        "bgmVolume": 0.3,
+                        "sfxVolume": 0.9,
+                        "voiceVolume": 1
+                    },
+                    "zone": zoneId, // Dynamically insert the current zoneId
+                    "allowsHouseVisitors": false,
+                    "hp": 709,
+                    "team": 0,
+                    "spellbook": [
+                        22, 36, 5, 11, 17, 29
+                    ],
+                    "stars": 92447,
+                    "level": 83,
+                    "gold": 117766,
+                    "useOldTutorialPath": false,
+                    "dailyLoginBonus": {
+                        "session": 0,
+                        "day": 2,
+                        "date": {
+                            "d": 7,
+                            "m": 7,
+                            "y": 2025
+                        }
+                    },
+                    "reward": 1,
+                    "rewardData": null,
+                    "rate": 5,
+                    "spells": [
+                        13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 1, 25, 7, 8, 2, 9, 10, 26, 27, 11, 3, 28, 29, 4, 5
+                    ],
+                    "arenaScore": 3823,
+                    "win": 70,
+                    "giveaways": {
+                        "seen": [],
+                        "applied": [],
+                        "recieved": []
+                    },
+                    "loss": 7,
+                    "arena": 16,
+                    "tower": 55,
+                    "spinDate": {
+                        "d": 8,
+                        "m": 7,
+                        "y": 2025,
+                        "twilightDates": [
+                            1754618597269,
+                            1754618599302
+                        ]
+                    },
+                    "numSpins": 2,
+                    "bountyScore": 1,
+                    "arenaRank": 4
+                },
+                "isMember": true
+            },
+            // The top-level "userID" should also be dynamically set by the context of the call
+            // as it's separate from wizard.userID but often matches.
+            "userID": userId // Dynamically insert the current userId
+        };
+    }
+
+    /**
      * Handles a new Socket.IO connection for a client joining this world.
      * @param {SocketIO.Socket} socket - The Socket.IO socket instance for the client.
-     * @param {object} query - The query parameters from the client's connection URL.
      */
-    handleConnection(socket) { // Renamed from handleConnection, now accepts Socket.IO socket directly
+    handleConnection(socket) {
         const userId = socket.handshake.query.userId;
         const worldId = socket.handshake.query.worldId;
-        const zone = socket.handshake.query.zone || "unknown";
-        const userToken = socket.handshake.query.userToken;
+        const zone = socket.handshake.query.zone || "skywatch-C3"; // Default zone if not provided
+
+        console.log(`World.handleConnection called for Socket ID: ${socket.id}, User ID: ${userId}, World ID: ${worldId}`);
 
         if (!userId || !worldId) {
-            console.error(`World.handleConnection: Missing userId or worldId in handshake. Closing socket.`);
+            console.error(`World.handleConnection: Missing userId or worldId in handshake for socket ${socket.id}. Disconnecting.`);
+            socket.emit("connect_error", "Missing player data. Please relog.");
             socket.disconnect(true);
             return;
         }
 
         if (this.playerCount >= this.maxPlayers) {
             console.warn(`World ${this.id} is full. User ${userId} denied connection.`);
-            socket.emit("connect_error", "World is full. Please select another world."); // Emit error back to client
+            socket.emit("connect_error", "World is full. Please select another world.");
             socket.disconnect(true);
             return;
         }
 
-        // Join a Socket.IO room specific to this world
-        socket.join(this.id);
+        // ⭐ Crucial for multiplayer: Add player to Socket.IO room for this world ⭐
+        socket.join(this.id); // Each world forms a Socket.IO room
+
+        // Generate initial position and wizard data for the new player
+        const initialX = Math.floor(Math.random() * 1000) + 100; // Example range
+        const initialY = Math.floor(Math.random() * 500) + 100; // Example range
         
-        // Store player info (using Socket.IO's socket.id for this connection)
-        this.players[userId] = { socketId: socket.id, zone, token: userToken };
+        // ⭐ Call _getMockWizardData to get the full wizard object ⭐
+        const newPlayerWizardObject = this._getMockWizardData(userId, zone);
+
+        // Store player info with their current position and wizard data
+        this.players[userId] = {
+            socketId: socket.id, zone: zone, wizardData: newPlayerWizardObject.wizard, x: initialX, y: initialY // Store the 'wizard' sub-object
+        };
         this.playerCount++;
         console.log(`User ${userId} (Socket.ID: ${socket.id}, Zone: ${zone}) joined world ${this.name}. Current players: ${this.playerCount}`);
 
-        // ⭐ Send initial wizard-update and zone-update messages to the new player ⭐
-        // These are critical for the client to render the player and load the zone.
-        // Mock data for wizard (replace with actual database lookup later)
-        const mockWizardData = {
-            _id: userId,
-            name: `Player_${userId.substring(0, 5)}`, // Simple name generation
-            appearance: {
-                gender: "male",
-                skinColor: 1,
-                hairStyle: 4,
-                hairColor: 1,
-                eyeColor: 1,
-                outfit: 1,
-                hat: 1,
-                weapon: 1
-            },
-            data: {
-                level: 1,
-                gold: 1000,
-                stars: 0,
-                hp: 100,
-                maxHp: 100
-            }
-            // Add other wizard properties as needed by game.min.js
-        };
 
-        // Send wizard-update
-        socket.emit("message", { // Client listens for "message" event for generic updates
+        // --- Send initial state to the NEWLY CONNECTED client ---
+
+        // 1. Send 'wizard-update' for the new player (self)
+        console.log(`Sending 'wizard-update' to ${userId} for self.`);
+        socket.emit("message", {
             event: "wizard-update",
-            wizard: mockWizardData,
-            userID: userId
+            wizard: newPlayerWizardObject.wizard, // Send the wizard object itself
+            userID: newPlayerWizardObject.userID // Send the top-level userID
         });
 
-        // Send zone-update (critical for player position and world loading)
-        socket.emit("message", { // Client listens for "message" event
+        // 2. Send initial 'zone-update' for the new player (self)
+        console.log(`Sending 'zone-update' to ${userId} for self (position: ${initialX}, ${initialY}).`);
+        socket.emit("message", {
             zone: zone,
-            position: { x: 640, y: 360 }, // Default spawn point, adjust as needed
-            inworld: true,
+            position: { x: initialX, y: initialY },
+            inworld: true, // Crucial flag indicating player is in a world instance
             event: "zone-update",
             userID: userId
         });
 
-        // Send playerList to the new player
-        const currentPlayerList = Object.keys(this.players).map(id => ({
+        // 3. Send initial 'playerList' containing *all* current players in this world
+        const currentPlayersData = Object.entries(this.players).map(([id, playerInfo]) => ({
             userID: id,
-            // Include other player data (like appearance, position) if available
+            wizard: playerInfo.wizardData, // Use the stored wizardData
+            zone: playerInfo.zone,
+            position: { x: playerInfo.x, y: playerInfo.y }
         }));
-        socket.emit("playerList", { players: currentPlayerList });
+        console.log(`Sending 'playerList' (${currentPlayersData.length} players) to ${userId}.`);
+        socket.emit("playerList", { players: currentPlayersData });
 
-        // Notify other players in this world that a new player joined
-        this.broadcast(socket.id, "playerJoined", { userID: userId, wizard: mockWizardData, zone: zone });
-        
-        // Handle messages from this client
+
+        // --- Notify OTHER existing players about the new player ---
+        console.log(`Broadcasting 'playerJoined', 'wizard-update', 'zone-update' for ${userId} to others.`);
+        socket.broadcast.to(this.id).emit("playerJoined", {
+            userID: userId,
+            wizard: newPlayerWizardObject.wizard,
+            zone: zone,
+            position: { x: initialX, y: initialY } // Include position for new player
+        });
+        socket.broadcast.to(this.id).emit("message", { // Often wrapped in "message" event for client
+            event: "wizard-update",
+            wizard: newPlayerWizardObject.wizard,
+            userID: newPlayerWizardObject.userID
+        });
+        socket.broadcast.to(this.id).emit("message", { // Often wrapped in "message" event for client
+            event: "zone-update",
+            zone: zone,
+            position: { x: initialX, y: initialY },
+            inworld: true,
+            userID: userId
+        });
+
+
+        // --- Set up event listeners for this specific client socket ---
         socket.on("message", (data) => {
             try {
-                console.log(`Received message from ${userId} in world ${this.id}:`, data);
-                // Example: Handle player movement or other game actions
-                if (data.type === "playerMove" && data.payload) {
-                    this.broadcast(socket.id, "playerMove", { userID: userId, ...data.payload });
-                } else if (data.type === "chatMessage" && data.payload) {
-                    this.broadcast(null, "chatMessage", { userID: userId, message: data.payload.message });
+                const parsedData = (typeof data === 'string') ? JSON.parse(data) : data;
+                console.log(`Received message from ${userId} in world ${this.id}:`, parsedData);
+
+                if (parsedData.type === "playerMove" && parsedData.payload) {
+                    this.players[userId].x = parsedData.payload.x;
+                    this.players[userId].y = parsedData.payload.y;
+                    socket.broadcast.to(this.id).emit("playerMove", { userID: userId, x: parsedData.payload.x, y: parsedData.payload.y });
+                    console.log(`Player ${userId} moved to (${parsedData.payload.x}, ${parsedData.payload.y}).`);
+                } else if (parsedData.type === "chatMessage" && parsedData.payload && parsedData.payload.message) {
+                    socket.to(this.id).emit("chatMessage", { userID: userId, message: parsedData.payload.message });
+                    console.log(`Player ${userId} chatted: "${parsedData.payload.message}"`);
                 }
-                // Add more message handling logic as needed for game events
             } catch (e) {
-                console.error(`Error parsing message from ${userId} in world ${this.id}:`, e);
+                console.error(`Error parsing or handling message from ${userId} in world ${this.id}:`, e, "Raw data:", data);
             }
         });
 
-        // Handle client disconnection
-        socket.on("disconnect", () => {
-            console.log(`User ${userId} (Socket.ID: ${socket.id}) disconnected from world ${this.name}.`);
-            delete this.players[userId];
-            this.playerCount--;
-            this.broadcast(null, "playerLeft", { userID: userId });
-            console.log(`Current players in ${this.name}: ${this.playerCount}`);
+        socket.on("disconnect", (reason) => {
+            console.log(`User ${userId} (Socket.ID: ${socket.id}) disconnected from world ${this.name}. Reason: ${reason}`);
+            if (this.players[userId]) {
+                delete this.players[userId];
+                this.playerCount--;
+                socket.broadcast.to(this.id).emit("playerLeft", { userID: userId, reason: reason });
+                console.log(`Current players in ${this.name}: ${this.playerCount}`);
+            }
         });
 
         socket.on("error", (error) => {
@@ -134,44 +243,7 @@ class World {
         });
     }
 
-    /**
-     * Broadcasts a message to all players in this world's Socket.IO room, optionally excluding one.
-     * @param {string|null} excludeSocketId - Socket.IO ID to exclude from broadcast, or null to send to all.
-     * @param {string} eventName - The name of the Socket.IO event.
-     * @param {object} payload - The message payload.
-     */
-    broadcast(excludeSocketId, eventName, payload) {
-        // Use Socket.IO's `to(room).emit(event, data)`
-        if (excludeSocketId) {
-            // Broadcast to all clients in the world's room except the sender
-            socket.broadcast.to(this.id).emit(eventName, payload);
-        } else {
-            // Broadcast to all clients in the world's room (including sender if desired by game logic)
-            // For now, only send to others if excludeSocketId is provided, otherwise, logic needs to be careful
-            // For general broadcasts, you'd usually want to use io.to(this.id).emit
-            // Let's assume this.io is passed in or accessible (from server.js)
-            // This method needs access to the global Socket.IO `io` instance from server.js
-            // For simplicity, we'll rely on the `io` instance being available in the server.js scope
-            // when calling broadcast from the WorldSystem.
-        }
-    }
-
-    getPlayerList() {
-        return Object.keys(this.players);
-    }
-
-    getBroadcastData() {
-        return {
-            id: this.id, // Include ID for client side
-            name: this.name,
-            path: this.path,
-            icon: this.icon,
-            full: this.full
-        };
-    }
-
     // Static property to hold all defined worlds.
-    // Constructor arguments: id, name, ownerId, maxPlayers, tag, icon, path
     static allWorlds = [
         new World("fireplane", "Fireplane", "admin", 50, "adventure", "fire", "/worlds/fireplane"),
         new World("icecaverns", "Ice Caverns", "admin", 30, "adventure", "ice", "/worlds/icecaverns"),
