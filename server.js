@@ -105,17 +105,40 @@ app.post("/game-api/v1/game-event", (req, res) => {
     console.log(`Responded to game event POST.`);
 });
 
-// ⭐ NEW: HTTP POST for matchmaking (e.g., startMatchmaking) ⭐
+// ⭐ NEW: HTTP POST for startMatchmaking ⭐
 app.post("/game-api/v1/matchmaking-api/begin", (req, res) => {
-    console.log(`\n--- Matchmaking POST Request ---`);
+    console.log(`\n--- Matchmaking: Start Request ---`);
     console.log(`Received POST request for /game-api/v1/matchmaking-api/begin from IP: ${req.ip}`);
-    console.log(`Matchmaking Data:`, JSON.stringify(req.body, null, 2));
+    const { userID, level, score, playerData, token } = req.body;
+    console.log(`User ${userID} wants to start matchmaking.`);
+    console.log(`Level: ${level}, Score: ${score}, Player Data: ${JSON.stringify(playerData)}, Token: ${token ? 'PRESENT' : 'MISSING'}`);
 
-    // Simulate matchmaking logic here (e.g., find a match, or put player in a queue)
-    // For now, just send a success response.
-    res.status(200).json({ status: "success", message: "Matchmaking request received." });
-    console.log(`Responded to matchmaking POST.`);
+    // Here, you would implement your actual matchmaking logic:
+    // 1. Add the user to a matchmaking queue.
+    // 2. Try to find an opponent based on level/score.
+    // 3. If a match is found, send a response indicating the match.
+    // 4. If no immediate match, send a response confirming they're in queue.
+
+    // For now, send a success response to acknowledge the request.
+    res.status(200).json({ status: "received", message: "Matchmaking request received. You are now in queue (simulated)." });
+    console.log(`Responded to matchmaking start POST.`);
 });
+
+// ⭐ NEW: HTTP POST for quitMatchmaking ⭐
+app.post("/game-api/v1/matchmaking-api/end", (req, res) => {
+    console.log(`\n--- Matchmaking: Quit Request ---`);
+    console.log(`Received POST request for /game-api/v1/matchmaking-api/end from IP: ${req.ip}`);
+    const { userID, token } = req.body;
+    console.log(`User ${userID} wants to quit matchmaking.`);
+    console.log(`Token: ${token ? 'PRESENT' : 'MISSING'}`);
+
+    // Here, you would remove the user from any active matchmaking queue.
+
+    // For now, send a success response to acknowledge the request.
+    res.status(200).json({ status: "received", message: "Matchmaking quit request received." });
+    console.log(`Responded to matchmaking quit POST.`);
+});
+
 
 // --- Server Startup ---
 server.listen(PORT, () => {
