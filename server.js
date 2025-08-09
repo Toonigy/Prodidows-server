@@ -1,7 +1,7 @@
 // server.js - Node.js + Express server for multiplayer game worlds and Socket.IO
 
 const express = require("express");
-const http = require("http"); // ⭐ FIXED: Removed accidental '=' assignment ⭐
+const http = require("http");
 const cors = require("cors");
 const path = require("path");
 const { Server } = require("socket.io"); // Using socket.io
@@ -16,6 +16,7 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json()); // ⭐ NEW: Middleware to parse JSON request bodies ⭐
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -105,11 +106,25 @@ app.get("/game-api/status", (req, res) => {
     console.log(`Responded with server status: OK.`);
 });
 
+// ⭐ NEW: HTTP POST for /game-api/v1/game-event ⭐
+// This endpoint receives tracking events from the client.
+app.post("/game-api/v1/game-event", (req, res) => {
+    console.log(`\n--- Game Event POST Request ---`);
+    console.log(`Received POST request for /game-api/v1/game-event from IP: ${req.ip}`);
+    console.log(`Request Body (Game Event Data):`, JSON.stringify(req.body, null, 2)); // Log formatted JSON
+    
+    // You can process this data here (e.g., save to a database, log for analytics)
+    // For now, we'll just acknowledge it.
+    res.status(200).json({ status: "received", message: "Game event logged." });
+    console.log(`Responded to game event POST.`);
+});
+
+
 // --- Server Startup ---
 server.listen(PORT, () => {
     console.log(`\n--- Server Startup ---`);
     console.log(`✅ Server is listening on port ${PORT}...`);
-    console.log(`🌐 HTTP endpoints for world list and status are online.`);
+    console.log(`🌐 HTTP endpoints for world list, status, and game events are online.`);
     console.log(`🚀 Socket.IO server is online and ready for game world connections.`);
     console.log(`💡 Local Socket.IO client connection URL: 'ws://localhost:${PORT}'`);
     console.log(`💡 Render Socket.IO client connection URL: 'wss://YOUR_RENDER_APP_URL.onrender.com'`);
