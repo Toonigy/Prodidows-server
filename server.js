@@ -16,7 +16,7 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json());
+app.use(express.json()); // Middleware to parse JSON request bodies
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -31,7 +31,7 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userID;
+    const userId = socket.handshake.query.userID; // Ensure case matches client query
     const worldId = socket.handshake.query.worldId;
     const authKey = socket.handshake.query.authKey;
     const zone = socket.handshake.query.zone || "skywatch-C3";
@@ -68,36 +68,28 @@ io.on("connection", (socket) => {
 
 // --- HTTP GET Endpoints ---
 
-// ⭐ MODIFIED: HTTP GET for /game-api/v2/worlds (World List - primary) ⭐
 app.get("/game-api/v2/worlds", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/v2/worlds from IP: ${req.ip}`);
     const worldsInfo = World.allWorlds.map(w => ({
-        // ⭐ ADDED: Include the 'id' property here ⭐
         id: w.id, // Ensure the client receives the 'id'
-        name: w.name,
-        path: w.path,
-        icon: w.icon,
-        full: w.full
+        name: w.name, path: w.path, icon: w.icon, full: w.full
     }));
     res.json(worldsInfo);
     console.log(`Responded with ${worldsInfo.length} worlds.`);
 });
 
-// ⭐ MODIFIED: HTTP GET for /game-api/world-list (World List - legacy/compatibility) ⭐
 app.get("/game-api/world-list", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/world-list from IP: ${req.ip}`);
     const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id, // This one already had it, confirming it's there
-        name: w.name, path: w.path, playerCount: w.playerCount,
+        id: w.id, name: w.name, path: w.path, playerCount: w.playerCount,
         maxPlayers: w.maxPlayers, tag: w.tag, icon: w.icon, full: w.full
     }));
     res.json(worldsInfo);
     console.log(`Responded with ${worldsInfo.length} worlds.`);
 });
 
-// ⭐ HTTP GET for /game-api/status ⭐
 app.get("/game-api/status", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/status from IP: ${req.ip}`);
@@ -105,7 +97,6 @@ app.get("/game-api/status", (req, res) => {
     console.log(`Responded with server status: OK.`);
 });
 
-// ⭐ HTTP POST for /game-api/v1/game-event ⭐
 app.post("/game-api/v1/game-event", (req, res) => {
     console.log(`\n--- Game Event POST Request ---`);
     console.log(`Received POST request for /game-api/v1/game-event from IP: ${req.ip}`);
@@ -114,11 +105,23 @@ app.post("/game-api/v1/game-event", (req, res) => {
     console.log(`Responded to game event POST.`);
 });
 
+// ⭐ NEW: HTTP POST for matchmaking (e.g., startMatchmaking) ⭐
+app.post("/game-api/v1/matchmaking-api/begin", (req, res) => {
+    console.log(`\n--- Matchmaking POST Request ---`);
+    console.log(`Received POST request for /game-api/v1/matchmaking-api/begin from IP: ${req.ip}`);
+    console.log(`Matchmaking Data:`, JSON.stringify(req.body, null, 2));
+
+    // Simulate matchmaking logic here (e.g., find a match, or put player in a queue)
+    // For now, just send a success response.
+    res.status(200).json({ status: "success", message: "Matchmaking request received." });
+    console.log(`Responded to matchmaking POST.`);
+});
+
 // --- Server Startup ---
 server.listen(PORT, () => {
     console.log(`\n--- Server Startup ---`);
     console.log(`✅ Server is listening on port ${PORT}...`);
-    console.log(`🌐 HTTP endpoints for world list, status, and game events are online.`);
+    console.log(`🌐 HTTP endpoints for world list, status, game events, and matchmaking are online.`);
     console.log(`🚀 Socket.IO server is online and ready for game world connections.`);
     console.log(`💡 Local Socket.IO client connection URL: 'ws://localhost:${PORT}'`);
     console.log(`💡 Render Socket.IO client connection URL: 'wss://YOUR_RENDER_APP_URL.onrender.com'`);
