@@ -25,7 +25,7 @@ app.get("/", (req, res) => {
 // ⭐ Socket.IO Server Setup ⭐
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "*", // Allow all origins for development. Restrict in production.
         methods: ["GET", "POST"]
     }
 });
@@ -42,7 +42,6 @@ io.on("connection", (socket) => {
 
     if (!userId || !worldId || !authKey) {
         console.error(`ERROR: Socket.IO connection rejected for socket ${socket.id}. Missing critical query parameters (userID: ${userId}, worldId: ${worldId}, authKey: ${authKey ? 'YES' : 'NO'}).`);
-        // ⭐ FIX: Changed "connect_error" to "serverConnectionError" ⭐
         socket.emit("serverConnectionError", "Missing authentication or world ID. Please relog.");
         socket.disconnect(true);
         return;
@@ -54,7 +53,6 @@ io.on("connection", (socket) => {
         targetWorld.handleConnection(socket);
     } else {
         console.warn(`WARNING: Socket.IO: Unknown worldId '${worldId}' for socket ${socket.id}. Disconnecting.`);
-        // ⭐ FIX: Changed "connect_error" to "serverConnectionError" ⭐
         socket.emit("serverConnectionError", "Invalid world selected.");
         socket.disconnect(true);
     }
@@ -63,33 +61,43 @@ io.on("connection", (socket) => {
         console.log(`Socket.IO client disconnected (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}): ${reason}`);
     });
 
-    socket.on('connect_error', (error) => { // This is for Socket.IO internal errors, not custom ones.
+    socket.on('connect_error', (error) => {
         console.error(`Socket.IO INTERNAL connection error (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}):`, error.message);
     });
 });
 
 // --- HTTP GET Endpoints ---
+
+// ⭐ MODIFIED: HTTP GET for /game-api/v2/worlds (World List - primary) ⭐
 app.get("/game-api/v2/worlds", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/v2/worlds from IP: ${req.ip}`);
     const worldsInfo = World.allWorlds.map(w => ({
-        name: w.name, path: w.path, icon: w.icon, full: w.full
+        // ⭐ ADDED: Include the 'id' property here ⭐
+        id: w.id, // Ensure the client receives the 'id'
+        name: w.name,
+        path: w.path,
+        icon: w.icon,
+        full: w.full
     }));
     res.json(worldsInfo);
     console.log(`Responded with ${worldsInfo.length} worlds.`);
 });
 
+// ⭐ MODIFIED: HTTP GET for /game-api/world-list (World List - legacy/compatibility) ⭐
 app.get("/game-api/world-list", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/world-list from IP: ${req.ip}`);
     const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id, name: w.name, path: w.path, playerCount: w.playerCount,
+        id: w.id, // This one already had it, confirming it's there
+        name: w.name, path: w.path, playerCount: w.playerCount,
         maxPlayers: w.maxPlayers, tag: w.tag, icon: w.icon, full: w.full
     }));
     res.json(worldsInfo);
     console.log(`Responded with ${worldsInfo.length} worlds.`);
 });
 
+// ⭐ HTTP GET for /game-api/status ⭐
 app.get("/game-api/status", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/status from IP: ${req.ip}`);
@@ -97,6 +105,7 @@ app.get("/game-api/status", (req, res) => {
     console.log(`Responded with server status: OK.`);
 });
 
+// ⭐ HTTP POST for /game-api/v1/game-event ⭐
 app.post("/game-api/v1/game-event", (req, res) => {
     console.log(`\n--- Game Event POST Request ---`);
     console.log(`Received POST request for /game-api/v1/game-event from IP: ${req.ip}`);
