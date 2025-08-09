@@ -16,7 +16,7 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json()); // Middleware to parse JSON request bodies
+app.use(express.json());
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -25,20 +25,16 @@ app.get("/", (req, res) => {
 // ⭐ Socket.IO Server Setup ⭐
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all origins for development. Restrict in production.
+        origin: "*",
         methods: ["GET", "POST"]
-    },
-    // Ensure that Socket.IO can handle the wss:// connection
-    // This is handled automatically by Render's proxy if the client connects to wss://
-    // No explicit 'path' option needed here unless you're customizing the Socket.IO path beyond /socket.io/
+    }
 });
 
 io.on("connection", (socket) => {
-    // ⭐ ENHANCED LOGGING & DEFENSIVE CHECKS ⭐
-    const userId = socket.handshake.query.userID; // Ensure case matches client query
+    const userId = socket.handshake.query.userID;
     const worldId = socket.handshake.query.worldId;
     const authKey = socket.handshake.query.authKey;
-    const zone = socket.handshake.query.zone || "skywatch-C3"; // Provide a default zone
+    const zone = socket.handshake.query.zone || "skywatch-C3";
 
     console.log(`\n--- Socket.IO Connection Attempt ---`);
     console.log(`Socket ID: ${socket.id}`);
@@ -46,7 +42,8 @@ io.on("connection", (socket) => {
 
     if (!userId || !worldId || !authKey) {
         console.error(`ERROR: Socket.IO connection rejected for socket ${socket.id}. Missing critical query parameters (userID: ${userId}, worldId: ${worldId}, authKey: ${authKey ? 'YES' : 'NO'}).`);
-        socket.emit("connect_error", "Missing authentication or world ID. Please relog.");
+        // ⭐ FIX: Changed "connect_error" to "serverConnectionError" ⭐
+        socket.emit("serverConnectionError", "Missing authentication or world ID. Please relog.");
         socket.disconnect(true);
         return;
     }
@@ -54,12 +51,11 @@ io.on("connection", (socket) => {
     const targetWorld = World.allWorlds.find(w => w.id === worldId);
     if (targetWorld) {
         console.log(`Attempting to handle connection for world: ${targetWorld.name} (${worldId})`);
-        // Ensure that WorldSystem is correctly instantiated and handles the socket
-        // WorldSystem.handleConnection delegates to World.handleConnection
-        targetWorld.handleConnection(socket); // Pass the socket directly to the World instance
+        targetWorld.handleConnection(socket);
     } else {
         console.warn(`WARNING: Socket.IO: Unknown worldId '${worldId}' for socket ${socket.id}. Disconnecting.`);
-        socket.emit("connect_error", "Invalid world selected.");
+        // ⭐ FIX: Changed "connect_error" to "serverConnectionError" ⭐
+        socket.emit("serverConnectionError", "Invalid world selected.");
         socket.disconnect(true);
     }
 
@@ -67,13 +63,12 @@ io.on("connection", (socket) => {
         console.log(`Socket.IO client disconnected (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}): ${reason}`);
     });
 
-    socket.on('connect_error', (error) => {
-        console.error(`Socket.IO connection error (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}):`, error.message);
+    socket.on('connect_error', (error) => { // This is for Socket.IO internal errors, not custom ones.
+        console.error(`Socket.IO INTERNAL connection error (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}):`, error.message);
     });
 });
 
 // --- HTTP GET Endpoints ---
-
 app.get("/game-api/v2/worlds", (req, res) => {
     console.log(`\n--- HTTP Request ---`);
     console.log(`Received HTTP GET request for /game-api/v2/worlds from IP: ${req.ip}`);
