@@ -55,10 +55,11 @@ class World {
     }
 
     handleConnection(socket) {
+        // ⭐ This line retrieves the worldId sent from the client: ⭐
         const userId = socket.handshake.query.userID;
-        const worldId = socket.handshake.query.worldId;
-        const zone = socket.handshake.query.zone || "skywatch-C3";
+        const worldId = socket.handshake.query.worldId; // This is where the backend looks for it!
         const authKey = socket.handshake.query.authKey;
+        const zoneId = socket.handshake.query.zone || "unknown-zone";
 
         console.log(`\n-- World Connection Handler (${this.name}) --`);
         console.log(`Processing connection for User ID: ${userId || 'N/A'}, World ID: ${worldId || 'N/A'}, Zone: ${zone}, AuthKey: ${authKey ? 'PRESENT' : 'MISSING'}`);
