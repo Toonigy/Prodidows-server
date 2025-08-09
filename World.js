@@ -9,7 +9,7 @@ class World {
         this.tag = tag;
 
         // ✅ Ensure icon is a full URL/path
-        this.icon = `/assets/icons/${icon}.png`; 
+        this.icon = `${icon}`; 
 
         this.path = path;
 
