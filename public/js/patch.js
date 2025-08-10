@@ -157,6 +157,29 @@
                 if (this.generic_ajax_error) this.generic_ajax_error(null, "Firebase not ready", "Firebase library not available.");
             }
         };
+
+        // ⭐ NEW: Add getWorldList method to PatchedApiClient to satisfy game.min.js if it calls directly ⭐
+        // This will allow game.min.js to call `this.api.getWorldList()` without error.
+        this.getWorldList = function(successCb, errorCb) {
+            Util.log("PatchedApiClient: Delegating getWorldList to generic GET (from PatchedApiClient).");
+            this.get("v1/world-list", successCb, errorCb);
+        };
+
+        // ⭐ NEW: Add emitMessage method to PatchedApiClient to satisfy game.min.js if it calls directly ⭐
+        // This is a placeholder as APIClient is typically for HTTP, but added to prevent TypeError
+        // if game.min.js expects it on this.api directly.
+        this.emitMessage = function(eventName, data, callback) {
+            Util.warn(`PatchedApiClient: Called emitMessage for event '${eventName}'. APIClient typically handles HTTP, not Socket.IO. This might be a misrouted call in game.min.js.`);
+            // You might choose to try and route it to the actual socket here if one exists globally
+            if (window.Prodigy && window.Prodigy.game && window.Prodigy.game.prodigy && window.Prodigy.game.prodigy.socket && typeof window.Prodigy.game.prodigy.socket.emit === 'function') {
+                window.Prodigy.game.prodigy.socket.emit(eventName, data, callback);
+            } else {
+                Util.error(`PatchedApiClient: Failed to emit '${eventName}'. No Socket.IO client available.`);
+                if (typeof callback === 'function') {
+                    callback({ success: false, message: "Socket.IO not available on ApiClient." });
+                }
+            }
+        };
     }
 
     // Assign the PatchedApiClient globally
@@ -270,27 +293,19 @@
             // Util.log("NetworkManager.updateCharacter: (Placeholder) Sending character update.");
         };
 
-        // ⭐ NEW: Add getWorldList method to NetworkManager prototype ⭐
-        NetworkManager_Constructor.prototype.getWorldList = function(successCb, errorCb) {
-            Util.log("NetworkManager.getWorldList: Fetching world list via ApiClient.");
-            // Call the ApiClient's generic GET method for the world list endpoint
-            this.api.get("v1/world-list", successCb, errorCb);
+        // ⭐ NEW: Add canUseMP method to NetworkManager prototype ⭐
+        NetworkManager_Constructor.prototype.canUseMP = function () {
+            // Assuming this.game.prodigy.old.signedIn refers to the game's internal signed-in state
+            // and this.socketConnected refers to the NetworkManager's socket status.
+            // We need to ensure 'zone' is part of the NetworkManager's instance if it's used.
+            // For now, defaulting `this.zone` to a safe check.
+            return (this.game.prodigy.old && this.game.prodigy.old.signedIn) &&
+                   this.socketConnected &&
+                   Util.isDefined(this.game.prodigy.player.zone); // Assuming zone is on the player object for multiplayer context
         };
 
-        // ⭐ NEW: Add emitMessage method to NetworkManager prototype ⭐
-        // This method assumes the active Socket.IO client is stored in window.Prodigy.game.prodigy.socket
-        NetworkManager_Constructor.prototype.emitMessage = function(eventName, data, callback) {
-            if (window.Prodigy && window.Prodigy.game && window.Prodigy.game.prodigy && window.Prodigy.game.prodigy.socket && typeof window.Prodigy.game.prodigy.socket.emit === 'function') {
-                Util.log(`NetworkManager.emitMessage: Emitting '${eventName}' with data:`, data);
-                window.Prodigy.game.prodigy.socket.emit(eventName, data, callback);
-            } else {
-                Util.warn(`NetworkManager.emitMessage: Cannot emit '${eventName}'. Socket.IO client not ready or not available at window.Prodigy.game.prodigy.socket.`);
-                if (typeof callback === 'function') {
-                    callback({ success: false, message: "Socket.IO not connected." });
-                }
-            }
-        };
 
+        // Removed getWorldList and emitMessage from here. They are now directly overridden in PATCH 6.
 
         return NetworkManager_Constructor;
     }(); // IIFE for NetworkManager_Patched
@@ -384,6 +399,7 @@
                     align: "center"
                 });
                 // Use the NetworkManager's getWorldList to fetch data
+                // This call should now correctly route to the patched NetworkManager.prototype.getWorldList (in Patch 6)
                 this.game.prodigy.network.getWorldList(
                     this.showSuggestedServers.bind(this),
                     this.showError.bind(this, "Could not load world list. Check your connection and try again.", this.showSuggestedServers.bind(this))
@@ -697,4 +713,46 @@
     // Alias for convenience
     window.Prodigy.Menu.Server = Prodigy_Menu_Server_Constructor;
     Util.log("⭐ Patch 5: Prodigy.Menu.Server re-defined.");
+})();
+
+// ⭐ PATCH 6: Directly override NetworkManager prototype methods from game.min.js ⭐
+// This patch targets the specific methods on the original NetworkManager prototype
+// that are causing TypeErrors due to misdirected calls to `this.api.getWorldList` etc.
+// This runs AFTER game.min.js has likely defined `window.NetworkManager` and its prototype.
+(function() {
+    // Ensure NetworkManager is accessible and has a prototype
+    if (typeof window.NetworkManager !== 'undefined' && typeof window.NetworkManager.prototype !== 'undefined') {
+
+        // Override the getWorldList method on NetworkManager's prototype
+        // This ensures that when game.min.js calls NetworkManager.prototype.getWorldList,
+        // it uses our corrected logic.
+        window.NetworkManager.prototype.getWorldList = function (successCb, errorCb) {
+            Util.log("⭐ Patch 6: Overriding NetworkManager.prototype.getWorldList. Calling this.api.get.");
+            // `this.api` here refers to the ApiClient instance within the NetworkManager.
+            // Our PatchedApiClient (from Patch 3) already has a generic `get` method.
+            this.api.get("v1/world-list", successCb, errorCb);
+        };
+        Util.log("⭐ Patch 6: NetworkManager.prototype.getWorldList overridden.");
+
+
+        // Override the emitMessage method on NetworkManager's prototype
+        // This ensures that when game.min.js calls NetworkManager.prototype.emitMessage,
+        // it uses our corrected logic, routing through the global socket.
+        window.NetworkManager.prototype.emitMessage = function (eventName, data, callback) {
+            Util.log(`⭐ Patch 6: Overriding NetworkManager.prototype.emitMessage. Emitting '${eventName}' via socket.`);
+            // Use the globally stored Socket.IO client instance, which is managed by Prodigy.Menu.Server
+            if (window.Prodigy && window.Prodigy.game && window.Prodigy.game.prodigy && window.Prodigy.game.prodigy.socket && typeof window.Prodigy.game.prodigy.socket.emit === 'function') {
+                window.Prodigy.game.prodigy.socket.emit(eventName, data, callback);
+            } else {
+                Util.warn(`Patch 6: Cannot emit '${eventName}'. Socket.IO client not ready or not available at window.Prodigy.game.prodigy.socket.`);
+                if (typeof callback === 'function') {
+                    callback({ success: false, message: "Socket.IO not connected." });
+                }
+            }
+        };
+        Util.log("⭐ Patch 6: NetworkManager.prototype.emitMessage overridden.");
+
+    } else {
+        Util.error("⭐ Patch 6: window.NetworkManager or its prototype not found. Cannot apply direct method overrides.");
+    }
 })();
