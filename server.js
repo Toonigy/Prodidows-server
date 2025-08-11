@@ -65,10 +65,24 @@ function generateMockPvpLeaderboard(minRank, maxRank, currentPlayerID, limit) {
 
 // --- HTTP Endpoints for API Calls ---
 
-// ⭐ NEW: HTTP GET endpoint for World List ⭐
-// This endpoint responds to client requests for the list of available game worlds.
-app.get("/v2/world-list", (req, res) => {
-    console.log(`\n--- World List GET Request ---`);
+// ⭐ NEW: HTTP GET endpoint for World List at /v2/worlds ⭐
+// This endpoint directly serves the world list, addressing the client's hardcoded request.
+app.get("/v2/worlds", (req, res) => {
+    console.log(`\n--- World List GET Request (via /v2/worlds) ---`);
+    console.log(`Received GET request for /v2/worlds from IP: ${req.ip}`);
+
+    // Get the simplified list of all worlds
+    const simplifiedWorlds = World.allWorlds.map(world => world.toSimplifiedObject());
+
+    // Send the simplified world list as a JSON response
+    res.status(200).json(simplifiedWorlds);
+    console.log(`Responded to /v2/worlds GET with ${simplifiedWorlds.length} worlds.`);
+});
+
+
+// ⭐ EXISTING: HTTP GET endpoint for World List (kept for backward compatibility if needed) ⭐
+app.get("/game-api/v1/world-list", (req, res) => {
+    console.log(`\n--- World List GET Request (via /game-api/v1/world-list) ---`);
     console.log(`Received GET request for /game-api/v1/world-list from IP: ${req.ip}`);
 
     // Get the simplified list of all worlds
