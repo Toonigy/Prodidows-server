@@ -30,113 +30,99 @@ const io = new Server(server, {
     }
 });
 
-io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userID; // Ensure case matches client query
-    const worldId = socket.handshake.query.worldId;
-    const authKey = socket.handshake.query.authKey;
-    const zone = socket.handshake.query.zone || "skywatch-C3";
+// Helper function to generate mock leaderboard data (for illustration, not directly used by world list)
+function generateMockPvpLeaderboard(minRank, maxRank, currentPlayerID, limit) {
+    const leaderboard = [];
+    const totalPlayers = 1000; // Simulate a larger pool of players
 
-    console.log(`\n--- Socket.IO Connection Attempt ---`);
-    console.log(`Socket ID: ${socket.id}`);
-    console.log(`Query Params: User ID = ${userId || 'N/A'}, World ID = ${worldId || 'N/A'}, AuthKey = ${authKey ? 'PRESENT' : 'MISSING'}, Zone = ${zone}`);
-
-    if (!userId || !worldId || !authKey) {
-        console.error(`ERROR: Socket.IO connection rejected for socket ${socket.id}. Missing critical query parameters (userID: ${userId}, worldId: ${worldId}, authKey: ${authKey ? 'YES' : 'NO'}).`);
-        socket.emit("serverConnectionError", "Missing authentication or world ID. Please relog.");
-        socket.disconnect(true);
-        return;
+    // Add a mix of players
+    for (let i = 0; i < limit; i++) {
+        const playerID = `player_${10000 + i}`;
+        const rank = minRank + i;
+        const score = 10000 - i * 10;
+        leaderboard.push({ rank, score, playerID });
     }
 
-    const targetWorld = World.allWorlds.find(w => w.id === worldId);
-    if (targetWorld) {
-        console.log(`Attempting to handle connection for world: ${targetWorld.name} (${worldId})`);
-        targetWorld.handleConnection(socket);
-    } else {
-        console.warn(`WARNING: Socket.IO: Unknown worldId '${worldId}' for socket ${socket.id}. Disconnecting.`);
-        socket.emit("serverConnectionError", "Invalid world selected.");
-        socket.disconnect(true);
+    // Ensure current player is included if not already (and if a real ID is provided)
+    if (currentPlayerID && !leaderboard.some(p => p.playerID === currentPlayerID)) {
+        // Add current player with a random rank/score within the range
+        const playerRank = Math.floor(Math.random() * (maxRank - minRank + 1)) + minRank;
+        const playerScore = Math.floor(Math.random() * 5000) + 5000;
+        leaderboard.push({ rank: playerRank, score: playerScore, playerID: currentPlayerID });
     }
 
-    socket.on('disconnect', (reason) => {
-        console.log(`Socket.IO client disconnected (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}): ${reason}`);
+    // Sort by score (descending) then rank (ascending)
+    leaderboard.sort((a, b) => {
+        if (b.score !== a.score) {
+            return b.score - a.score;
+        }
+        return a.rank - b.rank;
     });
 
-    socket.on('connect_error', (error) => {
-        console.error(`Socket.IO INTERNAL connection error (Socket ID: ${socket.id}, User ID: ${userId || 'N/A'}):`, error.message);
-    });
+    return leaderboard.slice(0, limit); // Ensure limit is respected after adding current player
+}
+
+
+// --- HTTP Endpoints for API Calls ---
+
+// ⭐ NEW: HTTP GET endpoint for World List ⭐
+// This endpoint responds to client requests for the list of available game worlds.
+app.get("/v2/world-list", (req, res) => {
+    console.log(`\n--- World List GET Request ---`);
+    console.log(`Received GET request for /game-api/v1/world-list from IP: ${req.ip}`);
+
+    // Get the simplified list of all worlds
+    const simplifiedWorlds = World.allWorlds.map(world => world.toSimplifiedObject());
+
+    // Send the simplified world list as a JSON response
+    res.status(200).json(simplifiedWorlds);
+    console.log(`Responded to world list GET with ${simplifiedWorlds.length} worlds.`);
 });
 
-// --- HTTP GET Endpoints ---
-
-app.get("/game-api/v2/worlds", (req, res) => {
-    console.log(`\n--- HTTP Request ---`);
-    console.log(`Received HTTP GET request for /game-api/v2/worlds from IP: ${req.ip}`);
-    const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id, // Ensure the client receives the 'id'
-        name: w.name, path: w.path, icon: w.icon, full: w.full
-    }));
-    res.json(worldsInfo);
-    console.log(`Responded with ${worldsInfo.length} worlds.`);
-});
-
-app.get("/game-api/world-list", (req, res) => {
-    console.log(`\n--- HTTP Request ---`);
-    console.log(`Received HTTP GET request for /game-api/world-list from IP: ${req.ip}`);
-    const worldsInfo = World.allWorlds.map(w => ({
-        id: w.id, name: w.name, path: w.path, playerCount: w.playerCount,
-        maxPlayers: w.maxPlayers, tag: w.tag, icon: w.icon, full: w.full
-    }));
-    res.json(worldsInfo);
-    console.log(`Responded with ${worldsInfo.length} worlds.`);
-});
-
-app.get("/game-api/status", (req, res) => {
-    console.log(`\n--- HTTP Request ---`);
-    console.log(`Received HTTP GET request for /game-api/status from IP: ${req.ip}`);
-    res.json({ status: "ok", message: "Server is running" });
-    console.log(`Responded with server status: OK.`);
-});
-
-app.post("/game-api/v1/game-event", (req, res) => {
+// ⭐ NEW: HTTP POST for game events (e.g., /game-api/v1/log-event) ⭐
+app.post("/game-api/v1/log-event", (req, res) => {
     console.log(`\n--- Game Event POST Request ---`);
-    console.log(`Received POST request for /game-api/v1/game-event from IP: ${req.ip}`);
+    console.log(`Received POST request for /game-api/v1/log-event from IP: ${req.ip}`);
     console.log(`Request Body (Game Event Data):`, JSON.stringify(req.body, null, 2));
     res.status(200).json({ status: "received", message: "Game event logged." });
     console.log(`Responded to game event POST.`);
 });
 
-// ⭐ NEW: HTTP POST for startMatchmaking ⭐
+// ⭐ NEW: HTTP POST for matchmaking (e.g., startMatchmaking) ⭐
 app.post("/game-api/v1/matchmaking-api/begin", (req, res) => {
-    console.log(`\n--- Matchmaking: Start Request ---`);
+    console.log(`\n--- Matchmaking POST Request ---`);
     console.log(`Received POST request for /game-api/v1/matchmaking-api/begin from IP: ${req.ip}`);
-    const { userID, level, score, playerData, token } = req.body;
-    console.log(`User ${userID} wants to start matchmaking.`);
-    console.log(`Level: ${level}, Score: ${score}, Player Data: ${JSON.stringify(playerData)}, Token: ${token ? 'PRESENT' : 'MISSING'}`);
+    console.log(`Matchmaking Data:`, JSON.stringify(req.body, null, 2));
 
-    // Here, you would implement your actual matchmaking logic:
-    // 1. Add the user to a matchmaking queue.
-    // 2. Try to find an opponent based on level/score.
-    // 3. If a match is found, send a response indicating the match.
-    // 4. If no immediate match, send a response confirming they're in queue.
-
-    // For now, send a success response to acknowledge the request.
-    res.status(200).json({ status: "received", message: "Matchmaking request received. You are now in queue (simulated)." });
-    console.log(`Responded to matchmaking start POST.`);
+    // Simulate matchmaking logic here (e.g., find a match, or put player in a queue)
+    // For now, just send a success response.
+    res.status(200).json({ status: "success", message: "Matchmaking request received." });
+    console.log(`Responded to matchmaking POST.`);
 });
 
-// ⭐ NEW: HTTP POST for quitMatchmaking ⭐
-app.post("/game-api/v1/matchmaking-api/end", (req, res) => {
-    console.log(`\n--- Matchmaking: Quit Request ---`);
-    console.log(`Received POST request for /game-api/v1/matchmaking-api/end from IP: ${req.ip}`);
-    const { userID, token } = req.body;
-    console.log(`User ${userID} wants to quit matchmaking.`);
-    console.log(`Token: ${token ? 'PRESENT' : 'MISSING'}`);
+// --- Socket.IO Connection Handling ---
+// A map to store WorldSystem instances, keyed by world path
+const worldSystems = {};
 
-    // Here, you would remove the user from any active matchmaking queue.
+// Initialize a WorldSystem for each world defined in World.allWorlds
+World.allWorlds.forEach(world => {
+    const system = new WorldSystem(world);
+    worldSystems[world.path] = system; // Store by path for easy lookup
+});
 
-    // For now, send a success response to acknowledge the request.
-    res.status(200).json({ status: "received", message: "Matchmaking quit request received." });
-    console.log(`Responded to matchmaking quit POST.`);
+io.on("connection", (socket) => {
+    const requestPath = socket.handshake.url; // Get the path the client connected to
+    const worldSystem = worldSystems[requestPath];
+
+    if (worldSystem) {
+        // Delegate the connection handling to the appropriate WorldSystem
+        worldSystem.handleConnection(socket);
+    } else {
+        console.warn(`\n--- Socket.IO Warning ---`);
+        console.warn(`No WorldSystem found for path: ${requestPath}. Disconnecting socket.`);
+        socket.disconnect(true); // Disconnect if no matching world system
+        console.log(`-------------------------\n`);
+    }
 });
 
 
@@ -146,7 +132,9 @@ server.listen(PORT, () => {
     console.log(`✅ Server is listening on port ${PORT}...`);
     console.log(`🌐 HTTP endpoints for world list, status, game events, and matchmaking are online.`);
     console.log(`🚀 Socket.IO server is online and ready for game world connections.`);
-    console.log(`💡 Local Socket.IO client connection URL: 'ws://localhost:${PORT}'`);
-    console.log(`💡 Render Socket.IO client connection URL: 'wss://YOUR_RENDER_APP_URL.onrender.com'`);
-    console.log(`------------------------\n`);
+    console.log(`Defined worlds:`);
+    World.allWorlds.forEach(world => {
+        console.log(`  - ID: ${world.id}, Name: "${world.name}", Path: "${world.path}"`);
+    });
+    console.log(`-----------------------\n`);
 });
