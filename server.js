@@ -1,140 +1,107 @@
-// server.js - Node.js + Express server for multiplayer game worlds and Socket.IO
-
 const express = require("express");
 const http = require("http");
-const cors = require("cors");
+const https = require("https"); // Import https module for WSS
+const fs = require("fs");     // Import fs module for file system operations
+const cors = require("cors"); 
 const path = require("path");
-const { Server } = require("socket.io"); // Using socket.io
-
-// Custom server-side modules
-const World = require("./World");
-const WorldSystem = require("./WorldSystem");
+const World = require("./World"); 
+const WorldSystem = require("./WorldSystem"); 
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const server = http.createServer(app);
 
-app.use(cors());
+let server; // Declare server variable outside try/catch
+
+// --- SSL/TLS Certificate Configuration (for WSS) ---
+// Make sure 'cert.pem' and 'key.pem' files exist in a 'certs' folder in your project root.
+const privateKeyPath = path.join(__dirname, 'certs', 'key.pem');
+const certificatePath = path.join(__dirname, 'certs', 'cert.pem');
+
+try {
+  // Check if certificate files exist before creating HTTPS server
+  if (fs.existsSync(privateKeyPath) && fs.existsSync(certificatePath)) {
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    const certificate = fs.readFileSync(certificatePath, 'utf8');
+    const credentials = { key: privateKey, cert: certificate };
+
+    // Create an HTTPS server
+    server = https.createServer(credentials, app);
+    console.log("✅ HTTPS server created. Ready for WSS connections.");
+  } else {
+    // Fallback to HTTP if certificates are not found
+    console.warn("SSL/TLS certificates (key.pem, cert.pem) not found in 'certs/' folder.");
+    console.warn("Starting HTTP server instead of HTTPS. Socket.IO will be WS, not WSS.");
+    server = http.createServer(app);
+  }
+} catch (error) {
+  console.error("❌ ERROR: Failed to create HTTPS server. Check 'certs/' folder and certificate files (key.pem, cert.pem).");
+  console.error("Falling back to HTTP. Socket.IO will be WS, not WSS.");
+  server = http.createServer(app); // Fallback to HTTP
+}
+
+
+app.use(cors()); 
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json()); // Middleware to parse JSON request bodies
+app.use(express.json()); 
 
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ⭐ Socket.IO Server Setup ⭐
+// The Socket.IO server is now attached to the 'server' variable,
+// which could be either HTTP or HTTPS.
+const { Server } = require("socket.io"); 
 const io = new Server(server, {
     cors: {
         origin: "*", // Allow all origins for development. Restrict in production.
         methods: ["GET", "POST"]
     }
 });
-
-// Helper function to generate mock leaderboard data (for illustration, not directly used by world list)
-function generateMockPvpLeaderboard(minRank, maxRank, currentPlayerID, limit) {
-    const leaderboard = [];
-    const totalPlayers = 1000; // Simulate a larger pool of players
-
-    // Add a mix of players
-    for (let i = 0; i < limit; i++) {
-        const playerID = `player_${10000 + i}`;
-        const rank = minRank + i;
-        const score = 10000 - i * 10;
-        leaderboard.push({ rank, score, playerID });
-    }
-
-    // Ensure current player is included if not already (and if a real ID is provided)
-    if (currentPlayerID && !leaderboard.some(p => p.playerID === currentPlayerID)) {
-        // Add current player with a random rank/score within the range
-        const playerRank = Math.floor(Math.random() * (maxRank - minRank + 1)) + minRank;
-        const playerScore = Math.floor(Math.random() * 5000) + 5000;
-        leaderboard.push({ rank: playerRank, score: playerScore, playerID: currentPlayerID });
-    }
-
-    // Sort by score (descending) then rank (ascending)
-    leaderboard.sort((a, b) => {
-        if (b.score !== a.score) {
-            return b.score - a.score;
-        }
-        return a.rank - b.rank;
-    });
-
-    return leaderboard.slice(0, limit); // Ensure limit is respected after adding current player
-}
+console.warn("Socket.IO server setup complete. Using HTTP/HTTPS as determined by main server setup.");
 
 
 // --- HTTP Endpoints for API Calls ---
-
-// ⭐ NEW: HTTP GET endpoint for World List at /v2/worlds ⭐
-// This endpoint directly serves the world list, addressing the client's hardcoded request.
 app.get("/v2/worlds", (req, res) => {
-    console.log(`\n--- World List GET Request (via /v2/worlds) ---`);
-    console.log(`Received GET request for /v2/worlds from IP: ${req.ip}`);
-
-    // Get the simplified list of all worlds
-    const simplifiedWorlds = World.allWorlds.map(world => world.toSimplifiedObject());
-
-    // Send the simplified world list as a JSON response
+    const simplifiedWorlds = World.allWorlds
+        .filter(world => world instanceof World && typeof world.toSimplifiedObject === 'function')
+        .map(world => world.toSimplifiedObject());
     res.status(200).json(simplifiedWorlds);
-    console.log(`Responded to /v2/worlds GET with ${simplifiedWorlds.length} worlds.`);
 });
 
-
-// ⭐ EXISTING: HTTP GET endpoint for World List (kept for backward compatibility if needed) ⭐
 app.get("/game-api/v1/world-list", (req, res) => {
-    console.log(`\n--- World List GET Request (via /game-api/v1/world-list) ---`);
-    console.log(`Received GET request for /game-api/v1/world-list from IP: ${req.ip}`);
-
-    // Get the simplified list of all worlds
-    const simplifiedWorlds = World.allWorlds.map(world => world.toSimplifiedObject());
-
-    // Send the simplified world list as a JSON response
+    const simplifiedWorlds = World.allWorlds
+        .filter(world => world instanceof World && typeof world.toSimplifiedObject === 'function')
+        .map(world => world.toSimplifiedObject());
     res.status(200).json(simplifiedWorlds);
-    console.log(`Responded to world list GET with ${simplifiedWorlds.length} worlds.`);
 });
 
-// ⭐ NEW: HTTP POST for game events (e.g., /game-api/v1/log-event) ⭐
 app.post("/game-api/v1/log-event", (req, res) => {
-    console.log(`\n--- Game Event POST Request ---`);
-    console.log(`Received POST request for /game-api/v1/log-event from IP: ${req.ip}`);
-    console.log(`Request Body (Game Event Data):`, JSON.stringify(req.body, null, 2));
     res.status(200).json({ status: "received", message: "Game event logged." });
-    console.log(`Responded to game event POST.`);
 });
 
-// ⭐ NEW: HTTP POST for matchmaking (e.g., startMatchmaking) ⭐
 app.post("/game-api/v1/matchmaking-api/begin", (req, res) => {
-    console.log(`\n--- Matchmaking POST Request ---`);
-    console.log(`Received POST request for /game-api/v1/matchmaking-api/begin from IP: ${req.ip}`);
-    console.log(`Matchmaking Data:`, JSON.stringify(req.body, null, 2));
-
-    // Simulate matchmaking logic here (e.g., find a match, or put player in a queue)
-    // For now, just send a success response.
     res.status(200).json({ status: "success", message: "Matchmaking request received." });
-    console.log(`Responded to matchmaking POST.`);
 });
+
 
 // --- Socket.IO Connection Handling ---
-// A map to store WorldSystem instances, keyed by world path
 const worldSystems = {};
-
-// Initialize a WorldSystem for each world defined in World.allWorlds
 World.allWorlds.forEach(world => {
     const system = new WorldSystem(world);
-    worldSystems[world.path] = system; // Store by path for easy lookup
+    worldSystems[world.path] = system; 
 });
 
 io.on("connection", (socket) => {
-    const requestPath = socket.handshake.url; // Get the path the client connected to
+    const requestPath = socket.handshake.url; 
     const worldSystem = worldSystems[requestPath];
 
     if (worldSystem) {
-        // Delegate the connection handling to the appropriate WorldSystem
         worldSystem.handleConnection(socket);
     } else {
         console.warn(`\n--- Socket.IO Warning ---`);
         console.warn(`No WorldSystem found for path: ${requestPath}. Disconnecting socket.`);
-        socket.disconnect(true); // Disconnect if no matching world system
+        socket.disconnect(true);
         console.log(`-------------------------\n`);
     }
 });
@@ -144,8 +111,11 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
     console.log(`\n--- Server Startup ---`);
     console.log(`✅ Server is listening on port ${PORT}...`);
-    console.log(`🌐 HTTP endpoints for world list, status, game events, and matchmaking are online.`);
-    console.log(`🚀 Socket.IO server is online and ready for game world connections.`);
+    if (server instanceof https.Server) {
+      console.log(`🌐 Serving HTTP/S & Socket.IO over WSS.`);
+    } else {
+      console.log(`🌐 Serving HTTP & Socket.IO over WS (SSL/TLS certificates not found or invalid).`);
+    }
     console.log(`Defined worlds:`);
     World.allWorlds.forEach(world => {
         console.log(`  - ID: ${world.id}, Name: "${world.name}", Path: "${world.path}"`);
