@@ -1,67 +1,74 @@
 const express = require("express");
 const http = require("http");
-const cors = require("cors"); // Re-add cors for Socket.IO setup
+// Removed: const https = require("https"); // Render handles HTTPS termination at load balancer
+// Removed: const fs = require("fs");     // Not needed for local HTTPS setup on Render
+const cors = require("cors");
 const path = require("path");
-const World = require("./World"); // Import the World class.
-const WorldSystem = require("./WorldSystem"); // Import WorldSystem
+const World = require("./World");
+const WorldSystem = require("./WorldSystem");
 
 const app = express();
+// ⭐ IMPORTANT: Listen on process.env.PORT for Render deployments ⭐
 const PORT = process.env.PORT || 10000;
-const server = http.createServer(app);
 
-app.use(cors()); // Use cors middleware
+// ⭐ Create an HTTP server (Render will handle HTTPS/WSS forwarding) ⭐
+let server = http.createServer(app);
+console.log("Server is running in HTTP-only mode (optimized for Render deployment).");
+
+
+app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json()); // Middleware to parse JSON request bodies
+app.use(express.json());
 
 app.get("/", (req, res) => {
+    // This route is typically not hit on Render if serving static assets separately
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ⭐ Socket.IO Server Setup ⭐
-// Re-adding Socket.IO setup as your WorldSystem and client expect it.
-const { Server } = require("socket.io"); 
+// The Socket.IO server is now attached to the HTTP server.
+const { Server } = require("socket.io");
 const io = new Server(server, {
     cors: {
         origin: "*", // Allow all origins for development. Restrict in production.
         methods: ["GET", "POST"]
     }
 });
-console.warn("Socket.IO server setup complete. Using HTTP for now.");
+console.log("Socket.IO server setup complete.");
 
 
 // --- HTTP Endpoints for API Calls ---
 
-// ⭐ FIX: Re-adding HTTP GET endpoint for World List at /v2/worlds ⭐
-// This endpoint directly serves the world list, addressing the client's hardcoded request.
-app.get("/v2/worlds", (req, res) => {
-    console.log(`\n--- World List GET Request (via /v2/worlds) ---`);
-    console.log(`Received GET request for /v2/worlds from IP: ${req.ip}`);
-
-    // ⭐ FIX: Filter out non-World instances before calling toSimplifiedObject() ⭐
-    const simplifiedWorlds = World.allWorlds
-        .filter(world => world instanceof World && typeof world.toSimplifiedObject === 'function')
-        .map(world => world.toSimplifiedObject());
-
-    // Send the simplified world list as a JSON response
+// HTTP GET endpoint for World List at /game-api/v2/worlds
+app.get("/game-api/v2/worlds", (req, res) => {
+    console.log(`\n--- World List GET Request (via /game-api/v2/worlds) ---`);
+    console.log(`Received GET request for /game-api/v2/worlds from IP: ${req.ip}`);
+    const simplifiedWorlds = World.allWorlds.map(world => ({
+        name: world.name || 'Unnamed World', path: world.path || '/unknown',
+        icon: (world.meta && world.meta.tag) ? world.meta.tag : 'default',
+        full: typeof world.currentPlayers === 'number' ? world.currentPlayers : 0,
+        currentPlayers: typeof world.currentPlayers === 'number' ? world.currentPlayers : 0,
+        maxPlayers: typeof world.maxPlayers === 'number' ? world.maxPlayers : 100
+    }));
     res.status(200).json(simplifiedWorlds);
-    console.log(`Responded to /v2/worlds GET with ${simplifiedWorlds.length} worlds.`);
+    console.log(`Responded to /game-api/v2/worlds GET with ${simplifiedWorlds.length} worlds.`);
 });
 
-
-// ⭐ Re-added: HTTP GET endpoint for World List (kept for backward compatibility if needed) ⭐
+// HTTP GET endpoint for World List (kept for backward compatibility if needed)
 app.get("/game-api/v1/world-list", (req, res) => {
     console.log(`\n--- World List GET Request (via /game-api/v1/world-list) ---`);
     console.log(`Received GET request for /game-api/v1/world-list from IP: ${req.ip}`);
-
-    // Get the simplified list of all worlds
-    const simplifiedWorlds = World.allWorlds.map(world => world.toSimplifiedObject());
-
-    // Send the simplified world list as a JSON response
+    const simplifiedWorlds = World.allWorlds.map(world => ({
+        name: world.name || 'Unnamed World', path: world.path || '/unknown',
+        icon: (world.meta && world.meta.tag) ? world.meta.tag : 'default',
+        full: typeof world.currentPlayers === 'number' ? world.currentPlayers : 0,
+        currentPlayers: typeof world.currentPlayers === 'number' ? world.currentPlayers : 0,
+        maxPlayers: typeof world.maxPlayers === 'number' ? world.maxPlayers : 100
+    }));
     res.status(200).json(simplifiedWorlds);
     console.log(`Responded to world list GET with ${simplifiedWorlds.length} worlds.`);
 });
 
-// ⭐ Re-added: HTTP POST for game events (e.g., /game-api/v1/log-event) ⭐
 app.post("/game-api/v1/log-event", (req, res) => {
     console.log(`\n--- Game Event POST Request ---`);
     console.log(`Received POST request for /game-api/v1/log-event from IP: ${req.ip}`);
@@ -70,36 +77,31 @@ app.post("/game-api/v1/log-event", (req, res) => {
     console.log(`Responded to game event POST.`);
 });
 
-// ⭐ Re-added: HTTP POST for matchmaking (e.g., startMatchmaking) ⭐
 app.post("/game-api/v1/matchmaking-api/begin", (req, res) => {
     console.log(`\n--- Matchmaking POST Request ---`);
     console.log(`Received POST request for /game-api/v1/matchmaking-api/begin from IP: ${req.ip}`);
     console.log(`Matchmaking Data:`, JSON.stringify(req.body, null, 2));
-
-    // Simulate matchmaking logic here (e.g., find a match, or put player in a queue)
-    // For now, just send a success response.
     res.status(200).json({ status: "success", message: "Matchmaking request received." });
     console.log(`Responded to matchmaking POST.`);
 });
 
 
 // --- Socket.IO Connection Handling ---
-// A map to store WorldSystem instances, keyed by world path
 const worldSystems = {};
-
-// Initialize a WorldSystem for each world defined in World.allWorlds
 World.allWorlds.forEach(world => {
     const system = new WorldSystem(world);
-    worldSystems[world.path] = system; // Store by path for easy lookup
+    worldSystems[world.path] = system;
 });
 
+// ⭐ IMPORTANT: io.on("connection") handles all incoming Socket.IO connections ⭐
 io.on("connection", (socket) => {
     const requestPath = socket.handshake.url; // Get the path the client connected to
+
+    // Delegate to the appropriate WorldSystem for game world connections
     const worldSystem = worldSystems[requestPath];
 
     if (worldSystem) {
-        // Delegate the connection handling to the appropriate WorldSystem
-        worldSystem.handleConnection(socket);
+        worldSystem.handleConnection(socket); // This is where the Socket.IO socket is passed to WorldSystem
     } else {
         console.warn(`\n--- Socket.IO Warning ---`);
         console.warn(`No WorldSystem found for path: ${requestPath}. Disconnecting socket.`);
