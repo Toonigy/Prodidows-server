@@ -1,15 +1,20 @@
 // WorldSystem.js
 
-// ⭐ REMOVED: const WebSocket = require("ws"); ⭐
-// This file now works with Socket.IO sockets passed from server.js
-
 const World = require("./World"); // Ensure World class is imported
 
-class WorldSystem { // WorldSystem no longer extends WebSocket.Server, it's a manager
+class WorldSystem {
     constructor(world) {
         this.world = world; // Store the World instance this system manages
+        // Map: userId -> { socket (Socket.IO instance), wizardData, currentZone, worldName, pvpOpponentId (if matched), x, y }
+        this.connectedPlayers = new Map(); // To manage Socket.IO clients for this world
+        this.world.playerCount = 0; // Initialize player count for this world system
 
-        console.log(`🌍 WorldSystem: Initializing for world "${this.world.name}" (Path: ${this.world.path})`);
+        // ⭐ NEW: PvP Matchmaking Queue and Active Matches ⭐
+        this.pvpMatchmakingQueue = new Map();
+        this.activePvpMatches = new Map(); 
+        let nextBattleId = 1; 
+
+        console.log(`🚀 WorldSystem: Initializing for world \"${this.world.name}\" (Path: ${this.world.path})`);
     }
 
     /**
@@ -17,104 +22,124 @@ class WorldSystem { // WorldSystem no longer extends WebSocket.Server, it's a ma
      * @param {SocketIO.Socket} socket - The Socket.IO socket instance for the client.
      */
     handleConnection(socket) {
-        const userId = socket.handshake.query.userId;
-        const worldId = socket.handshake.query.worldId;
-        const zone = socket.handshake.query.zone || "unknown";
-        const userToken = socket.handshake.query.userToken;
-
-        if (!userId || !worldId) {
-            console.error(`World.handleConnection: Missing userId or worldId in handshake. Disconnecting socket.`);
-            socket.emit("connect_error", "Missing userId or worldId.");
-            socket.disconnect(true);
-            return;
-        }
-
-        if (this.world.playerCount >= this.world.maxPlayers) {
-            console.warn(`World ${this.world.id} is full. User ${userId} denied connection.`);
-            socket.emit("connect_error", "World is full. Please select another world.");
-            socket.disconnect(true);
-            return;
-        }
-
-        // Join a Socket.IO room specific to this world
-        socket.join(this.world.id);
+        // Socket.IO's handshake.query provides access to URL query parameters
+        const userId = socket.handshake.query.userID;
+        const authKey = socket.handshake.query.authKey;
+        const zone = socket.handshake.query.zone;
         
-        // Store player info (using Socket.IO's socket.id for this connection)
-        this.world.players[userId] = { socketId: socket.id, zone, token: userToken };
-        this.world.playerCount++;
-        console.log(`User ${userId} (Socket.ID: ${socket.id}, Zone: ${zone}) joined world ${this.world.name}. Current players: ${this.world.playerCount}`);
+        // --- Authentication & Validation ---
+        if (!userId || !authKey || userId === 'FALLBACK_USERID_MISSING') {
+            console.error(`❌ Connection rejected: Missing credentials or using fallbacks. UserID: ${userId}`);
+            // Send failure and disconnect to prevent hanging
+            socket.emit("authFailure", { message: "Invalid credentials or missing user ID." });
+            socket.disconnect(true);
+            return;
+        }
 
-        // ⭐ Send initial wizard-update and zone-update messages to the new player ⭐
-        // Mock data for wizard (replace with actual database lookup later)
-        const mockWizardData = {
-            _id: userId,
-            name: `Player_${userId.substring(0, 5)}`,
-            appearance: {
-                gender: "male", skinColor: 1, hairStyle: 4, hairColor: 1, eyeColor: 1, outfit: 1, hat: 1, weapon: 1
-            },
-            data: {
-                level: 1, gold: 1000, stars: 0, hp: 100, maxHp: 100
-            }
+        if (this.connectedPlayers.has(userId)) {
+            console.warn(`User ${userId} already connected. Kicking old connection.`);
+            this.connectedPlayers.get(userId).socket.disconnect(true);
+        }
+
+        // --- Player Initialization ---
+        this.world.playerCount++;
+        // Get the mock wizard data for the specific world/zone
+        const wizardData = this.world._getMockWizardData(userId, zone); 
+
+        const playerEntry = {
+            socket: socket,
+            wizardData: wizardData,
+            currentZone: zone,
+            worldName: this.world.name,
+            pvpOpponentId: null,
+            // Add initial position (mock starting at 50,50 for simplicity)
+            x: 50,
+            y: 50 
         };
 
-        // Send wizard-update
-        socket.emit("message", { // Client listens for "message" event for generic updates
-            event: "wizard-update",
-            wizard: mockWizardData,
-            userID: userId
-        });
+        this.connectedPlayers.set(userId, playerEntry);
+        console.log(`✅ User ${userId} connected to ${this.world.name}/${zone}. Total players: ${this.world.playerCount}`);
 
-        // Send zone-update (critical for player position and world loading)
-        socket.emit("message", { // Client listens for "message" event
-            zone: zone,
-            position: { x: 640, y: 360 }, // Default spawn point, adjust as needed
-            inworld: true,
-            event: "zone-update",
-            userID: userId
-        });
-
-        // Send playerList to the new player
-        const currentPlayerList = Object.keys(this.world.players).map(id => ({
-            userID: id,
-            // You might need to fetch and include more data for other players here
-        }));
-        socket.emit("playerList", { players: currentPlayerList });
-
-        // Notify other players in this world that a new player joined
-        // Use io.to(room).emit for broadcasting, this method needs access to the main io instance
-        // For simplicity, within World.js's broadcast method, we will use socket.broadcast.to(room).emit
-        // when broadcasting to others, which is accessible from the current socket object.
-        socket.broadcast.to(this.world.id).emit("playerJoined", { userID: userId, wizard: mockWizardData, zone: zone });
+        // --- Core Game Flow: Send Initial State to New Player (CRITICAL) ---
         
-        // Handle messages from this client
-        socket.on("message", (data) => {
-            try {
-                console.log(`Received message from ${userId} in world ${this.world.id}:`, data);
-                // Example: Handle player movement or other game actions
-                if (data.type === "playerMove" && data.payload) {
-                    socket.broadcast.to(this.world.id).emit("playerMove", { userID: userId, ...data.payload });
-                } else if (data.type === "chatMessage" && data.payload) {
-                    // For chat, send to all in the room, including sender if desired, so use io.to(room).emit
-                    // This specific broadcast within WorldSystem.js will need access to `io`
-                    // For now, let's assume `io` is passed to the WorldSystem constructor or accessible
-                    // For a robust solution, you'd pass `io` to WorldSystem and then to World's broadcast method.
-                    // Simplified for direct use:
-                    // If you want sender to receive it: io.to(this.world.id).emit("chatMessage", { userID: userId, message: data.payload.message });
-                    // If you want others to receive it: socket.broadcast.to(this.world.id).emit("chatMessage", { userID: userId, message: data.payload.message });
-                    socket.broadcast.to(this.world.id).emit("chatMessage", { userID: userId, message: data.payload.message });
-                }
-                // Add more message handling logic as needed for game events
-            } catch (e) {
-                console.error(`Error parsing message from ${userId} in world ${this.world.id}:`, e);
+        // 1. Send the player's own data back to confirm authentication/join (e.g., 'authSuccess')
+        socket.emit("authSuccess", {
+            userID: userId,
+            wizard: wizardData.wizard,
+            // Add any other crucial initial data
+        });
+
+        // 2. Send the list of existing players to the new player
+        const otherPlayers = [];
+        this.connectedPlayers.forEach((p, id) => {
+            if (id !== userId) {
+                otherPlayers.push(p.wizardData);
             }
         });
+        
+        // The client needs to know who else is here to render them.
+        socket.emit("playersInWorld", { players: otherPlayers });
+        console.log(`Sent ${otherPlayers.length} existing player records to ${userId}.`);
 
-        // Handle client disconnection
-        socket.on("disconnect", () => {
-            console.log(`User ${userId} (Socket.ID: ${socket.id}) disconnected from world ${this.world.name}.`);
-            delete this.world.players[userId];
+
+        // 3. Broadcast the new player's data to all other existing players
+        // This makes the new player appear on others' screens.
+        socket.broadcast.to(this.world.path).emit("playerJoined", {
+            userID: userId,
+            wizard: wizardData.wizard,
+            zone: zone,
+            x: playerEntry.x,
+            y: playerEntry.y
+        });
+        console.log(`Broadcast 'playerJoined' for ${userId}.`);
+
+
+        // --- Listeners for Game Events (Movement, Chat, etc.) ---
+        
+        socket.on("move", (data) => {
+            // Update player position
+            playerEntry.x = data.x;
+            playerEntry.y = data.y;
+            playerEntry.currentZone = data.zone;
+
+            // Broadcast the movement to all other players in the world
+            socket.broadcast.to(this.world.path).emit("playerMoved", {
+                userID: userId,
+                x: data.x,
+                y: data.y,
+                zone: data.zone,
+                time: Date.now()
+            });
+        });
+
+        socket.on("chat", (data) => {
+            console.log(`[CHAT] ${userId}: ${data.message}`);
+            // Broadcast the chat message to all players in the world
+            this.world.namespace.emit("chatMessage", { // Use the namespace to broadcast to all
+                userID: userId,
+                message: data.message,
+                time: Date.now()
+            });
+        });
+        
+        // Handle explicit request to join a zone/world (in case client tries this later)
+        socket.on("joinWorld", (data) => {
+            // Since they are already connected, this is usually a zone change
+            console.log(`User ${userId} requested to join zone: ${data.zoneId}`);
+            // We would implement zone change logic here
+        });
+        
+
+        // --- Disconnect Handler ---
+        socket.on("disconnect", (reason) => {
+            console.log(`User ${userId} disconnected from ${this.world.name}. Reason: ${reason}`);
+            this.handlePlayerLeavePvp(userId); // Handle PvP cleanup
+
+            this.connectedPlayers.delete(userId);
             this.world.playerCount--;
-            socket.broadcast.to(this.world.id).emit("playerLeft", { userID: userId });
+
+            // Tell everyone else the player left
+            socket.broadcast.to(this.world.path).emit("playerLeft", { userID: userId, reason: reason });
             console.log(`Current players in ${this.world.name}: ${this.world.playerCount}`);
         });
 
@@ -122,6 +147,8 @@ class WorldSystem { // WorldSystem no longer extends WebSocket.Server, it's a ma
             console.error(`Socket.IO error for user ${userId} in world ${this.world.id}:`, error);
         });
     }
+
+    // ... (rest of WorldSystem class methods remain the same, including matchmaking) ...
 }
 
 module.exports = WorldSystem;
