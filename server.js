@@ -157,15 +157,19 @@ app.get('/api/v1/endpoints', (req, res) => {
 // --- 5.2. NEW MOCK ENDPOINT: /game-api/v1/worlds ---
 // The client is requesting a list of worlds, so we must provide one.
 app.get('/game-api/v1/worlds', (req, res) => {
-    // Return a mock list of worlds. The client will use this list for display.
+    // Helper function to get current user count
+    const getUserCount = (worldId) => Object.keys(ROOMS).includes(worldId) ? ROOMS[worldId].size : 0;
+    
+    // Return a mock list of worlds formatted according to the client's expected structure.
     console.log('[API MOCK] Serving mock world list at /game-api/v1/worlds');
     res.status(200).send({
         success: true,
         worlds: [
-            { id: "AstralPlane", name: "Astral Plane", status: "online", users: Object.keys(ROOMS).includes("AstralPlane") ? ROOMS["AstralPlane"].size : 0, recommended: true },
-            { id: "Phoenix", name: "Phoenix", status: "online", users: Object.keys(ROOMS).includes("Phoenix") ? ROOMS["Phoenix"].size : 0, recommended: true },
-            { id: "Glacier", name: "Glacier", status: "online", users: Object.keys(ROOMS).includes("Glacier") ? ROOMS["Glacier"].size : 0, recommended: false },
-            { id: "Nova", name: "Nova", status: "online", users: Object.keys(ROOMS).includes("Nova") ? ROOMS["Nova"].size : 0, recommended: false }
+            // Updated structure: full maps to user count, added icon and path
+            { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: "star", path: "/worlds/astralplane" },
+            { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: "fire", path: "/worlds/phoenix" },
+            { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: "ice", path: "/worlds/glacier" },
+            { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: "bolt", path: "/worlds/nova" }
         ]
     });
 });
