@@ -86,33 +86,34 @@ io.on('connection', (socket) => {
     const { worldId, userToken, zone } = socket.handshake.query;
     let userId; // Will be set after token validation
 
-    if (!worldId || !userToken) {
-        const missingParams = [];
-        if (!worldId) missingParams.push('worldId');
-        if (!userToken) missingParams.push('userToken');
-
-        console.warn(`[SOCKET ERROR] Connection attempt rejected due to missing parameters: ${missingParams.join(', ')} for socket: ${socket.id}. Handshake Query:`, socket.handshake.query);
+    if (!worldId) {
+        // Must have a worldId to connect
+        console.warn(`[SOCKET ERROR] Connection attempt rejected due to missing worldId for socket: ${socket.id}.`);
         socket.disconnect(true);
         return;
     }
 
-    // Authenticate token (Mock Authentication)
-    // FIX: Derive userId directly from the userToken, as the client may not be setting userId correctly.
+    // --- CRITICAL FIX: Handle missing userToken during initial connection (zone-login) ---
     const expectedPrefix = 'TOKEN_';
     
-    if (userToken.startsWith(expectedPrefix)) {
-        // Derive the userId from the valid token format
+    if (userToken && userToken.startsWith(expectedPrefix)) {
+        // Token is present and validly formatted (post-authentication)
         userId = userToken.substring(expectedPrefix.length);
-    }
-    
-    if (!userId) {
-        // The token didn't start with TOKEN_ or derivation failed.
-        console.warn(`[SOCKET ERROR] Connection attempt rejected: Invalid mock token format or failed User ID derivation. Received: ${userToken}`);
+    } else if (zone === 'zone-login' || !userToken) {
+        // Token is missing (undefined/null) or we are in the initial login zone.
+        // Allow connection with a temporary mock ID based on socket ID.
+        // This prevents the connection fail when the client tries to connect before getting a token.
+        userId = `ANON_${socket.id}`;
+        console.log(`[SOCKET WARNING] UserToken missing or invalid. Using temporary anonymous ID: ${userId}`);
+    } else {
+        // Token is invalid and we are NOT in the login zone. Reject.
+        console.warn(`[SOCKET ERROR] Connection attempt rejected: Invalid mock token format or failed User ID derivation. Received: ${userToken}. Zone: ${zone}`);
         socket.disconnect(true);
         return;
     }
+    // --- END CRITICAL FIX ---
 
-    // Since the userId is derived from the token, we can proceed.
+    // Since the userId is derived or assigned, we can proceed.
     
     // Join the world room
     socket.join(worldId);
@@ -136,6 +137,12 @@ io.on('connection', (socket) => {
 
     // Handle incoming game messages
     socket.on('gameMessage', (message) => {
+        // For game messages, we might want to check if the user is still 'ANON_'
+        if (userId.startsWith('ANON_')) {
+            console.warn(`[SOCKET REJECT] Anonymous user ${userId} attempted to send a game message.`);
+            return;
+        }
+        
         socket.to(worldId).emit('message', {
             sender: userId,
             content: message
