@@ -2,9 +2,8 @@ const express = require('express');
 const http = require('http'); 
 const { Server } = require('socket.io'); 
 const path = require('path');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getDatabase, ref, get, set } = require('firebase-admin/database'); 
-const { getAuth } = require('firebase-admin/auth'); 
+// FIX: Changed deep imports to single root import for robustness in deployment environments.
+const admin = require('firebase-admin'); 
 const cors = require('cors');
 const crypto = require('crypto');
 
@@ -31,8 +30,9 @@ try {
     // Note: The service account file is specific to your Firebase project and must be available in the deployed environment.
     const serviceAccount = require('./pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json');
     
-    initializeApp({
-        credential: cert(serviceAccount),
+    // FIX: Use methods from the 'admin' object instead of individual deep imports
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
         databaseURL: FIREBASE_CONFIG.databaseURL,
         projectId: FIREBASE_CONFIG.projectId
     });
@@ -40,8 +40,9 @@ try {
     console.warn("Firebase Admin failed to initialize. Ensure 'pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json' is present or configuration is correct:", error.message);
 }
 
-const dbAdmin = getDatabase();
-const authAdmin = getAuth();
+// FIX: Use methods from the 'admin' object instead of individual deep imports
+const dbAdmin = admin.database(); 
+const authAdmin = admin.auth();
 
 // --- 3. EXPRESS APP AND MIDDLEWARE ---\r\n
 
