@@ -65,7 +65,8 @@ const io = new Server(server, {
 // Mock storage for connected users/worlds (in-memory)
 const worldUsers = new Map();
 
-io.on('connection', (socket) => {
+// CHANGE: Made the connection handler async to allow for token verification
+io.on('connection', async (socket) => {
     console.log(`[SOCKET] User connected: ${socket.id}`);
     console.log(`[SOCKET DEBUG] Handshake Query:`, socket.handshake.query);
 
@@ -83,23 +84,25 @@ io.on('connection', (socket) => {
         return;
     }
 
-    // --- Authentication Logic (Still uses mock for early connection, client MUST use resolveAuth later) ---
-    const expectedPrefix = 'TOKEN_'; // This prefix is no longer used, but kept for legacy client compatibility check
+    // --- Authentication Logic (Now ASYNC to verify token if present) ---
+    // If a token is provided and Firebase Admin Auth is initialized, attempt verification.
+    if (userToken && userToken.length > 30 && authAdmin) { 
+        try {
+            // Verify the Firebase ID Token provided in the handshake query
+            const decodedToken = await authAdmin.verifyIdToken(userToken);
+            userId = decodedToken.uid; // Set to the real Firebase UID
+            console.log(`[SOCKET AUTH SUCCESS] User ${userId} authenticated via Handshake Token.`);
+        } catch (error) {
+            // Token verification failed (expired, invalid, etc.)
+            console.warn(`[SOCKET WARNING] Handshake Token failed verification: ${error.message}. Falling back to anonymous.`);
+            userId = `ANON_${socket.id}`;
+        }
+    } 
     
-    // Check if a token-like string is present
-    if (userToken && userToken.length > 30) { 
-        // Assume this token carries the actual UID after client-side exchange. 
-        // The client should ideally send the real UID, but we rely on resolveAuth
-        // to set the final ID.
-        userId = `AUTH_${userToken.substring(0, 10)}`; 
-    } else if (zone === 'zone-login' || !userToken) {
-        // Token is missing or we are in the initial login zone.
+    // If verification failed or no token was provided, fall back to anonymous ID.
+    if (!userId) {
         userId = `ANON_${socket.id}`;
-        console.log(`[SOCKET WARNING] UserToken missing or invalid. Using temporary anonymous ID: ${userId}`);
-    } else {
-        console.warn(`[SOCKET ERROR] Connection attempt rejected: Invalid mock token format. Received: ${userToken}. Zone: ${zone}`);
-        socket.disconnect(true);
-        return;
+        console.log(`[SOCKET WARNING] No valid UserToken or Auth Admin found. Using temporary anonymous ID: ${userId}`);
     }
     // --- END Authentication Logic ---
 
