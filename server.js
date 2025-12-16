@@ -154,7 +154,23 @@ app.get('/api/v1/endpoints', (req, res) => {
     });
 });
 
-// --- 5.2. MOCK ENDPOINT: /game-api/v1/cloud/load ---
+// --- 5.2. NEW MOCK ENDPOINT: /game-api/v1/worlds ---
+// The client is requesting a list of worlds, so we must provide one.
+app.get('/game-api/v1/worlds', (req, res) => {
+    // Return a mock list of worlds. The client will use this list for display.
+    console.log('[API MOCK] Serving mock world list at /game-api/v1/worlds');
+    res.status(200).send({
+        success: true,
+        worlds: [
+            { id: "AstralPlane", name: "Astral Plane", status: "online", users: Object.keys(ROOMS).includes("AstralPlane") ? ROOMS["AstralPlane"].size : 0, recommended: true },
+            { id: "Phoenix", name: "Phoenix", status: "online", users: Object.keys(ROOMS).includes("Phoenix") ? ROOMS["Phoenix"].size : 0, recommended: true },
+            { id: "Glacier", name: "Glacier", status: "online", users: Object.keys(ROOMS).includes("Glacier") ? ROOMS["Glacier"].size : 0, recommended: false },
+            { id: "Nova", name: "Nova", status: "online", users: Object.keys(ROOMS).includes("Nova") ? ROOMS["Nova"].size : 0, recommended: false }
+        ]
+    });
+});
+
+// --- 5.3. MOCK ENDPOINT: /game-api/v1/cloud/load ---
 
 app.get('/game-api/v1/cloud/load', async (req, res) => {
     const userID = await authenticateRequest(req);
@@ -204,7 +220,7 @@ app.get('/game-api/v1/cloud/load', async (req, res) => {
     }
 });
 
-// --- 5.3. MOCK ENDPOINT: /game-api/v1/cloud/save (POST) ---
+// --- 5.4. MOCK ENDPOINT: /game-api/v1/cloud/save (POST) ---
 
 app.post('/game-api/v1/cloud/save', async (req, res) => {
     const userID = await authenticateRequest(req);
@@ -250,7 +266,7 @@ app.post('/game-api/v1/cloud/save', async (req, res) => {
     }
 });
 
-// --- 5.4. NEW MOCK ENDPOINT: /game-api/v1/cloud/save (GET - for simple client load) ---
+// --- 5.5. MOCK ENDPOINT: /game-api/v1/cloud/save (GET - for simple client load) ---
 
 app.get('/game-api/v1/cloud/save', async (req, res) => {
     const userID = await authenticateRequest(req); 
