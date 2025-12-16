@@ -30,7 +30,8 @@ const PORT = process.env.PORT || 3000;
 const auth = {
     // Mock the critical method used for token verification (API and Socket.IO)
     verifyIdToken: async (token) => {
-        if (token && token.length > 30) {
+        // FIX: Lower the minimum length check to 5, which allows the client's initial mock token ("MOCK_AUTH_TOKEN_XYZ", length 21) to pass.
+        if (token && token.length > 5) { 
             // Success: Return a hardcoded mock UID as if verification passed.
             return { uid: 'mock-firebase-uid-123' }; 
         }
@@ -270,7 +271,7 @@ io.on('connection', async (socket) => {
     let authenticatedUID = null;
     if (userToken) {
         try {
-            // Step 1: Verify the token using the MOCKED auth
+            // Step 1: Verify the token using the MOCKED auth (now accepts shorter tokens)
             const decodedToken = await auth.verifyIdToken(userToken);
             authenticatedUID = decodedToken.uid;
             console.log(`[SOCKET.IO AUTH MOCK] Token verified. UID: ${authenticatedUID}`);
@@ -286,8 +287,6 @@ io.on('connection', async (socket) => {
         // Use emit('error') before disconnecting to give the client a defined reason.
         socket.emit('error', { code: '401', message: 'Authentication required for multiplayer connection.' });
         
-        // FIX: The disconnect call itself might be what is logged as 'undefined'.
-        // We ensure we send a specific message first, then disconnect.
         return socket.disconnect(true);
     }
 
