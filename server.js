@@ -2,8 +2,9 @@ const express = require('express');
 const http = require('http'); 
 const { Server } = require('socket.io'); 
 const path = require('path');
-// FIX: Changed deep imports to single root import for robustness in deployment environments.
+// Updated Firebase Admin Imports
 const admin = require('firebase-admin'); 
+const { getDatabase, ref, get, set } = require('firebase-admin/database');
 const cors = require('cors');
 const crypto = require('crypto');
 
@@ -21,32 +22,25 @@ const FIREBASE_CONFIG = {
 const PORT = process.env.PORT || 3000; // Use process.env.PORT for Render
 const API_ROOT = '/game-api/v1';
 
-// --- NEW GLOBAL STATE: Mock Persistence for Signed-In Status ---
-const mockUsers = new Map(); // userID -> { uniqueKey: string, googleSignedIn: boolean, save: object }
-// --- END NEW GLOBAL STATE ---
-
 // --- 2. FIREBASE ADMIN INITIALIZATION ---\r\n
-let dbAdmin; // Declared globally
-let authAdmin; // Declared globally
+let dbAdmin; // Firebase Realtime Database Admin
+let authAdmin; // Firebase Auth Admin
 
 try {
-    // Note: The service account file is specific to your Firebase project and must be available in the deployed environment.
     const serviceAccount = require('./pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json');
     
-    // FIX: Use methods from the 'admin' object instead of individual deep imports
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: FIREBASE_CONFIG.databaseURL,
         projectId: FIREBASE_CONFIG.projectId
     });
 
-    // FIX: Initialize dbAdmin and authAdmin ONLY if initializeApp succeeded.
-    dbAdmin = admin.database(); 
-    authAdmin = admin.auth();
+    dbAdmin = getDatabase(); // Initialize Realtime Database
+    authAdmin = admin.auth(); // Initialize Auth Admin
     
 } catch (error) {
-    console.warn("Firebase Admin failed to initialize. Ensure 'pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json' is present or configuration is correct. Firebase Admin services will be unavailable:", error.message);
-    // dbAdmin and authAdmin remain undefined, preventing the FirebaseAppError.
+    console.warn("Firebase Admin failed to initialize. Persistence and real authentication will be unavailable:", error.message);
+    // dbAdmin and authAdmin remain undefined.
 }
 
 // --- 3. EXPRESS APP AND MIDDLEWARE ---\r\n
@@ -73,69 +67,57 @@ const worldUsers = new Map();
 
 io.on('connection', (socket) => {
     console.log(`[SOCKET] User connected: ${socket.id}`);
-
-    // NEW DEBUG: Log all query parameters received
     console.log(`[SOCKET DEBUG] Handshake Query:`, socket.handshake.query);
 
-    // NEW: Listen for client logs and output them to the server console
     socket.on('clientLog', (logs) => {
         console.log(`[CLIENT LOG from ${socket.id}]:`, ...logs);
     });
     
-    // Extract connection details from query. We will derive userId from userToken.
+    // Extract connection details from query.
     const { worldId, userToken, zone } = socket.handshake.query;
-    let userId; // Will be set after token validation (and may be reassigned later in resolveAuth)
+    let userId; // Will be set after token validation (or temporarily assigned)
 
     if (!worldId) {
-        // Must have a worldId to connect
         console.warn(`[SOCKET ERROR] Connection attempt rejected due to missing worldId for socket: ${socket.id}.`);
         socket.disconnect(true);
         return;
     }
 
-    // --- CRITICAL FIX: Handle missing userToken during initial connection (zone-login) ---
-    const expectedPrefix = 'TOKEN_';
+    // --- Authentication Logic (Still uses mock for early connection, client MUST use resolveAuth later) ---
+    const expectedPrefix = 'TOKEN_'; // This prefix is no longer used, but kept for legacy client compatibility check
     
-    if (userToken && userToken.startsWith(expectedPrefix)) {
-        // Token is present and validly formatted (post-authentication)
-        userId = userToken.substring(expectedPrefix.length);
+    // Check if a token-like string is present
+    if (userToken && userToken.length > 30) { 
+        // Assume this token carries the actual UID after client-side exchange. 
+        // The client should ideally send the real UID, but we rely on resolveAuth
+        // to set the final ID.
+        userId = `AUTH_${userToken.substring(0, 10)}`; 
     } else if (zone === 'zone-login' || !userToken) {
-        // Token is missing (undefined/null) or we are in the initial login zone.
-        // Allow connection with a temporary mock ID based on socket ID.
-        // This prevents the connection fail when the client tries to connect before getting a token.
+        // Token is missing or we are in the initial login zone.
         userId = `ANON_${socket.id}`;
         console.log(`[SOCKET WARNING] UserToken missing or invalid. Using temporary anonymous ID: ${userId}`);
     } else {
-        // Token is invalid and we are NOT in the login zone. Reject.
-        console.warn(`[SOCKET ERROR] Connection attempt rejected: Invalid mock token format or failed User ID derivation. Received: ${userToken}. Zone: ${zone}`);
+        console.warn(`[SOCKET ERROR] Connection attempt rejected: Invalid mock token format. Received: ${userToken}. Zone: ${zone}`);
         socket.disconnect(true);
         return;
     }
-    // --- END CRITICAL FIX ---
+    // --- END Authentication Logic ---
 
-    // Since the userId is derived or assigned, we can proceed.
-    
-    // Join the world room
     socket.join(worldId);
     
-    // Track user in the world
     if (!worldUsers.has(worldId)) {
         worldUsers.set(worldId, new Map());
     }
     worldUsers.get(worldId).set(userId, { socketId: socket.id, zone: zone });
     
-    // --- CONFIRMATION LOG: Show World ID and user count ---
     console.log(`[SOCKET SUCCESS] User ${userId} joined World ID: ${worldId} in Zone: ${zone}. Current users in world: ${worldUsers.get(worldId).size}`);
-    // --- END CONFIRMATION LOG ---
     
-    // Notify others in the world that a player joined
     socket.to(worldId).emit('playerJoined', userId);
 
-    // Send the current player list to the newly connected user
     const playerList = Array.from(worldUsers.get(worldId).keys());
     socket.emit('playerList', playerList);
 
-    // NEW HANDLER: Allows the client to upgrade from an anonymous ID to a real ID after HTTP authentication
+    // HANDLER: Allows the client to upgrade from an anonymous ID to a real ID after HTTP authentication
     socket.on('resolveAuth', (newUserId) => {
         const currentWorldId = socket.handshake.query.worldId;
         
@@ -146,27 +128,18 @@ io.on('connection', (socket) => {
         
         const users = worldUsers.get(currentWorldId);
         
-        // Check if the current ID is the temporary anonymous one and if it's currently tracked
-        if (userId.startsWith('ANON_') && users.has(userId)) {
+        if (users.has(userId) && userId !== newUserId) {
             const oldUserId = userId;
             
-            // 1. Remove the old anonymous ID entry
             users.delete(oldUserId);
-            
-            // 2. Reassign the userId variable in this socket's closure to the new authenticated ID
             userId = newUserId; 
-            
-            // 3. Add the new authenticated ID entry
             users.set(newUserId, { socketId: socket.id, zone: socket.handshake.query.zone });
             
-            console.log(`[SOCKET RESOLVE SUCCESS] ${oldUserId} resolved to authenticated user ${newUserId}.`);
+            console.log(`[SOCKET RESOLVE SUCCESS] ${oldUserId} resolved to authenticated UID ${newUserId}.`);
             
-            // 4. Notify all players of the user's updated ID/presence
-            // Sending playerLeft for the old ID and playerJoined for the new ID forces client update
             socket.to(currentWorldId).emit('playerLeft', oldUserId);
             socket.to(currentWorldId).emit('playerJoined', newUserId);
             
-            // Send updated player list directly to the resolving user
             const playerList = Array.from(users.keys());
             socket.emit('playerList', playerList);
             
@@ -175,9 +148,8 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle incoming game messages
     socket.on('gameMessage', (message) => {
-        // For game messages, we must check if the user is still 'ANON_'
+        // Only allow messages from resolved users (not ANON_)
         if (userId.startsWith('ANON_')) {
             console.warn(`[SOCKET REJECT] Anonymous user ${userId} attempted to send a game message.`);
             return;
@@ -189,7 +161,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Handle disconnect
     socket.on('disconnect', () => {
         console.log(`[SOCKET] User disconnected: ${socket.id}, UserID: ${userId}`);
 
@@ -208,62 +179,106 @@ io.on('connection', (socket) => {
 
 // --- 6. AUTHENTICATED API ENDPOINTS (Express Router) ---\r\n
 
-const mockAuthMiddleware = (req, res, next) => {
+// Middleware now verifies Firebase ID Token
+const authMiddleware = async (req, res, next) => {
+    // Client must send the Firebase ID Token in the 'auth-key' header or query/body.
     const uniqueKey = req.headers['auth-key'] || req.body.token || req.query.token;
     
-    if (uniqueKey && uniqueKey.startsWith('TOKEN_')) {
-        req.userID = uniqueKey.replace('TOKEN_', '');
+    if (!uniqueKey || !authAdmin) {
+        return res.status(401).send({ error: 'Unauthorized: Missing token or Auth service unavailable.' });
+    }
+
+    try {
+        // Verify the Firebase ID Token
+        const decodedToken = await authAdmin.verifyIdToken(uniqueKey);
+        req.userID = decodedToken.uid;
+        console.log(`[AUTH SUCCESS] Token verified for UID: ${req.userID}`);
         next();
-    } else {
-        console.warn(`[API] Auth failed for request to ${req.path}. Token: ${uniqueKey}`);
-        res.status(401).send({ error: 'Unauthorized: Invalid or missing uniqueKey' });
+    } catch (error) {
+        console.warn(`[API] Auth failed for request to ${req.path}. Token verification error: ${error.message}`);
+        res.status(401).send({ error: 'Unauthorized: Invalid Firebase ID Token.' });
     }
 };
 
 const apiRouter = express.Router();
-apiRouter.use(mockAuthMiddleware);
+apiRouter.use(authMiddleware);
 
-// Endpoint 1: Mock Cloud Save Data (GET)
-apiRouter.get('/save', (req, res) => {
+// Endpoint 1: Cloud Save Data (GET) - Fetches data from RTDB
+apiRouter.get('/save', async (req, res) => {
+    if (!dbAdmin) {
+        return res.status(500).send({ error: "Server Database service unavailable." });
+    }
+
     const userID = req.userID;
-    let userData = mockUsers.get(userID) || { googleSignedIn: false }; // Get stored mock status
+    const dbRef = ref(dbAdmin, `users/${userID}/saveData`);
 
-    // Mock save data structure (minimal for client to function)
-    const mockSaveData = {
-        save: {
-            // FIX: Explicitly include the userID within the save object, 
-            // as the client often expects it here to initialize game state.
-            userID: userID, 
-            name: "Mock Wizard",
-            pet: { type: "epona" },
-            isMember: false,
-            appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
-            gold: 500,
-            level: 1,
-            lastModified: Date.now(),
-            // NEW: Add flag that server transmits regarding Google authentication status
-            isGoogleAuthenticated: userData.googleSignedIn 
-        },
-        loggedIn: true
-    };
+    try {
+        const snapshot = await get(dbRef);
+        let saveData = snapshot.val();
+        
+        if (!saveData) {
+            // Data doesn't exist, return a default mock save structure to bootstrap the client
+            console.log(`[RTDB] No data found for user ${userID}. Returning default structure.`);
+            saveData = {
+                userID: userID, 
+                name: "New Wizard",
+                pet: { type: "epona" },
+                isMember: false,
+                appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
+                gold: 100,
+                level: 1,
+                lastModified: Date.now(),
+                isGoogleAuthenticated: false
+            };
+        } else {
+            console.log(`[RTDB] Data successfully loaded for user ${userID}.`);
+        }
 
-    console.log(`[RESPONSE] Returned mock cloud save for user ${userID}. Google Auth Status: ${userData.googleSignedIn}`);
-    return res.status(200).send(mockSaveData); 
+        const responseData = {
+            save: saveData,
+            loggedIn: true // Always true if token was verified
+        };
+        
+        return res.status(200).send(responseData);
+    } catch (error) {
+        console.error(`[RTDB ERROR] Failed to fetch data for user ${userID}:`, error.message);
+        return res.status(500).send({ error: "Failed to load game data from database." });
+    }
 });
 
-// Endpoint 3: Mock Save Game Data (POST)
-apiRouter.post('/save', (req, res) => {
+// Endpoint 3: Save Game Data (POST) - Saves data to RTDB
+apiRouter.post('/save', async (req, res) => {
+    if (!dbAdmin) {
+        return res.status(500).send({ error: "Server Database service unavailable." });
+    }
+
     const userID = req.userID;
-    console.log(`[SAVE] User ${userID} attempting to save data:`, req.body);
-    
-    // In a real app, you would save req.body.save to the database
-    
-    res.status(200).send({
-        lastModified: Date.now()
-    });
+    const clientSaveData = req.body.save;
+
+    if (!clientSaveData) {
+        return res.status(400).send({ error: "Missing save data in request body." });
+    }
+
+    // Update the timestamp before saving and ensure the ID is correct
+    clientSaveData.lastModified = Date.now();
+    clientSaveData.userID = userID; 
+
+    const dbRef = ref(dbAdmin, `users/${userID}/saveData`);
+
+    try {
+        await set(dbRef, clientSaveData);
+        console.log(`[RTDB] Data successfully saved for user ${userID}.`);
+        
+        res.status(200).send({
+            lastModified: clientSaveData.lastModified
+        });
+    } catch (error) {
+        console.error(`[RTDB ERROR] Failed to save data for user ${userID}:`, error.message);
+        return res.status(500).send({ error: "Failed to save game data to database." });
+    }
 });
 
-// Endpoint 4 & 5 (Account): Omitted for brevity, but exist and use mockAuthMiddleware
+// Endpoint 4 & 5 (Account): Omitted for brevity, but exist and use authMiddleware
 
 // --- 7. UNATHENTICATED API ENDPOINTS (App) ---
 
@@ -285,48 +300,41 @@ app.get('/game-api/status', (req, res) => {
 });
 
 // Endpoint C: Mock Authentication (POST) - Login/Create Endpoint
-app.post(`${API_ROOT}/account/`, (req, res) => {
+app.post(`${API_ROOT}/account/save`, async (req, res) => {
+    if (!authAdmin) {
+        return res.status(500).send({ error: "Server authentication service unavailable." });
+    }
+    
     let providedUserID = req.body.userID || req.body.save?.userID;
-    let isGoogleSignOn = !!providedUserID; // Assume if client sends an ID, they are logging in (Google or existing session)
+    
+    // Determine the UID for the custom token
+    let finalUserID = providedUserID;
 
-    let mockUserID = providedUserID;
-
-    if (!mockUserID) {
-        // New user sign-up (anonymous flow in a real app)
-        mockUserID = crypto.randomBytes(16).toString('hex');
-        isGoogleSignOn = false;
-        console.log(`[LOGIN/CREATE] Mocking new anonymous user: ${mockUserID}.`);
+    if (!finalUserID) {
+        // Simulate new user creation: generate a pseudo-UID for the database path
+        // In a real application, you would manage user records. Here, we generate a unique ID.
+        finalUserID = `anon-${crypto.randomBytes(12).toString('hex')}`; 
+        console.log(`[LOGIN/CREATE] Simulating new anonymous user UID: ${finalUserID}.`);
     } else {
-        console.log(`[LOGIN/CREATE] Mocking login for existing user: ${mockUserID}.`);
+        console.log(`[LOGIN/CREATE] Using provided UID: ${finalUserID}.`);
     }
     
-    const mockToken = `TOKEN_${mockUserID}`;
-    
-    // --- Server-Side Persistence Update ---
-    let userData = mockUsers.get(mockUserID);
-    if (!userData) {
-        // New user data for persistence
-        userData = {
-            uniqueKey: mockToken,
-            googleSignedIn: isGoogleSignOn, // Store the sign-in status
-            save: {}
-        };
-        mockUsers.set(mockUserID, userData);
-    } else {
-        // Existing user, update token and potentially status (if the client logic dictates)
-        userData.uniqueKey = mockToken;
-        // If the user logs in via a persistent UID, we maintain/set their signed-in status
-        if (isGoogleSignOn) {
-            userData.googleSignedIn = true;
-        }
-    }
-    // --- End Persistence Update ---
+    try {
+        // Create a Firebase Custom Token using the determined UID
+        const customToken = await authAdmin.createCustomToken(finalUserID);
+        console.log(`[AUTH] Generated Custom Token for UID: ${finalUserID}`);
 
-    res.status(200).send({
-        userID: mockUserID,
-        uniqueKey: mockToken,
-        loggedIn: true
-    });
+        // Client will exchange this customToken for an ID Token on the client side. 
+        // We return the custom token as the uniqueKey.
+        res.status(200).send({
+            userID: finalUserID,
+            uniqueKey: customToken, // Send the Custom Token
+            loggedIn: true
+        });
+    } catch (error) {
+        console.error(`[AUTH ERROR] Failed to create custom token for ${finalUserID}:`, error.message);
+        res.status(500).send({ error: "Failed to generate authentication token." });
+    }
 });
 
 
@@ -341,6 +349,5 @@ server.listen(PORT, () => {
     console.log(`Serving static content from: /public`);
     console.log(`API Endpoints: /game-api/v1/worlds (UNAUTHENTICATED), /game-api/v1/save (GET & POST), /game-api/v1/account, /game-api/status`);
     console.log(`Multiplayer Socket: ws://localhost:${PORT}`);
-    console.log("Mock Login Token format: TOKEN_<UserID>");
-    // Suggestion for client-side use: Upon successful HTTP login, send socket.emit('resolveAuth', realUserID)
+    console.log("NOTE: Client must exchange the Custom Token (uniqueKey from /account/save) for an ID Token, and use the ID Token for all subsequent API requests.");
 });
