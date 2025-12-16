@@ -285,7 +285,7 @@ app.get('/game-api/status', (req, res) => {
 });
 
 // Endpoint C: Mock Authentication (POST) - Login/Create Endpoint
-app.post(`${API_ROOT}/account/save`, (req, res) => {
+app.post(`${API_ROOT}/account/`, (req, res) => {
     let providedUserID = req.body.userID || req.body.save?.userID;
     let isGoogleSignOn = !!providedUserID; // Assume if client sends an ID, they are logging in (Google or existing session)
 
