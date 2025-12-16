@@ -84,7 +84,7 @@ io.on('connection', (socket) => {
     
     // Extract connection details from query. We will derive userId from userToken.
     const { worldId, userToken, zone } = socket.handshake.query;
-    let userId; // Will be set after token validation
+    let userId; // Will be set after token validation (and may be reassigned later in resolveAuth)
 
     if (!worldId) {
         // Must have a worldId to connect
@@ -135,9 +135,49 @@ io.on('connection', (socket) => {
     const playerList = Array.from(worldUsers.get(worldId).keys());
     socket.emit('playerList', playerList);
 
+    // NEW HANDLER: Allows the client to upgrade from an anonymous ID to a real ID after HTTP authentication
+    socket.on('resolveAuth', (newUserId) => {
+        const currentWorldId = socket.handshake.query.worldId;
+        
+        if (!currentWorldId || !newUserId || !worldUsers.has(currentWorldId)) {
+            console.warn(`[SOCKET RESOLVE] Failed: Missing worldId or newUserId, or world not tracked.`);
+            return;
+        }
+        
+        const users = worldUsers.get(currentWorldId);
+        
+        // Check if the current ID is the temporary anonymous one and if it's currently tracked
+        if (userId.startsWith('ANON_') && users.has(userId)) {
+            const oldUserId = userId;
+            
+            // 1. Remove the old anonymous ID entry
+            users.delete(oldUserId);
+            
+            // 2. Reassign the userId variable in this socket's closure to the new authenticated ID
+            userId = newUserId; 
+            
+            // 3. Add the new authenticated ID entry
+            users.set(newUserId, { socketId: socket.id, zone: socket.handshake.query.zone });
+            
+            console.log(`[SOCKET RESOLVE SUCCESS] ${oldUserId} resolved to authenticated user ${newUserId}.`);
+            
+            // 4. Notify all players of the user's updated ID/presence
+            // Sending playerLeft for the old ID and playerJoined for the new ID forces client update
+            socket.to(currentWorldId).emit('playerLeft', oldUserId);
+            socket.to(currentWorldId).emit('playerJoined', newUserId);
+            
+            // Send updated player list directly to the resolving user
+            const playerList = Array.from(users.keys());
+            socket.emit('playerList', playerList);
+            
+        } else {
+            console.warn(`[SOCKET RESOLVE] Failed: User ${userId} is already authenticated or not found in worldUsers.`);
+        }
+    });
+
     // Handle incoming game messages
     socket.on('gameMessage', (message) => {
-        // For game messages, we might want to check if the user is still 'ANON_'
+        // For game messages, we must check if the user is still 'ANON_'
         if (userId.startsWith('ANON_')) {
             console.warn(`[SOCKET REJECT] Anonymous user ${userId} attempted to send a game message.`);
             return;
@@ -302,4 +342,5 @@ server.listen(PORT, () => {
     console.log(`API Endpoints: /game-api/v1/worlds (UNAUTHENTICATED), /game-api/v1/save (GET & POST), /game-api/v1/account, /game-api/status`);
     console.log(`Multiplayer Socket: ws://localhost:${PORT}`);
     console.log("Mock Login Token format: TOKEN_<UserID>");
+    // Suggestion for client-side use: Upon successful HTTP login, send socket.emit('resolveAuth', realUserID)
 });
