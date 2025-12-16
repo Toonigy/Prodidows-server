@@ -19,7 +19,7 @@ const FIREBASE_CONFIG = {
     appId: "1:1091179956834:web:8e3289d3ca0a61fe829f3b",
     measurementId: "G-GXT9N6J6Y2"
 };
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Use process.env.PORT for Render
 const API_ROOT = '/game-api/v1';
 
 // --- NEW GLOBAL STATE: Mock Persistence for Signed-In Status ---
@@ -28,6 +28,7 @@ const mockUsers = new Map(); // userID -> { uniqueKey: string, googleSignedIn: b
 
 // --- 2. FIREBASE ADMIN INITIALIZATION ---\r\n
 try {
+    // Note: The service account file is specific to your Firebase project and must be available in the deployed environment.
     const serviceAccount = require('./pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json');
     
     initializeApp({
