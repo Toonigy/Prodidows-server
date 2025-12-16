@@ -2,336 +2,578 @@ const express = require('express');
 const http = require('http'); 
 const { Server } = require('socket.io'); 
 const path = require('path');
-// Import Firebase Admin imports, but we will mock them below
-const admin = {
-    auth: () => ({
-        // Mocking the critical method used by authMiddleware and io.on('connection')
-        verifyIdToken: async (token) => {
-            if (token && token.length > 30) {
-                // When a token is present, always return a mock UID as if verification passed.
-                return { uid: 'mock-firebase-uid-123' };
-            }
-            throw new Error("Invalid token or missing mock setup.");
-        },
-        // Mocking createCustomToken for the /account/save endpoint
-        createCustomToken: async (uid) => {
-            // Return the UID as a token for simplicity in the mock environment
-            // In a real app, this creates a JWT. Here, we just use the UID.
-            return `mock-token-for-${uid}`; 
-        }
-    }),
-    // Mocking Realtime Database functions
-    initializeApp: () => ({}), // Empty init
-    credential: { cert: () => {} } // Empty credential
-};
-const { getDatabase, ref, get, set } = require('firebase-admin/database'); // These are not used, but kept for context
+const { initializeApp, applicationDefault } = require('firebase-admin/app');
+// Change: Import Realtime Database functions instead of Firestore
+const { getDatabase, ref, get, set } = require('firebase-admin/database'); 
+// NEW: Import Firebase Admin Auth for token verification
+const { getAuth } = require('firebase-admin/auth'); 
 const cors = require('cors');
-const crypto = require('crypto');
 
-// --- 1. MANDATORY GLOBAL CONFIGURATION ---\r\n
+// --- 1. MANDATORY GLOBAL CONFIGURATION ---
+
+// In a real application, these must be securely loaded from environment variables.
 const FIREBASE_CONFIG = {
+    // UPDATED FIREBASE CONFIGURATION
     apiKey: "AIzaSyBWVP1pba2QK8YU59Ot6Jx7BWLI3FD3c4c",
     authDomain: "pde13532.firebaseapp.com",
-    databaseURL: "https://pde13532-default-rtdb.firebaseio.com",
+    databaseURL: "https://pde13532-default-rtdb.firebaseio.com", // Keeping the requested URL
     projectId: "pde13532",
     storageBucket: "pde13532.firebasestorage.app",
     messagingSenderId: "1091179956834",
     appId: "1:1091179956834:web:8e3289d3ca0a61fe829f3b",
-    measurementId: "G-GXT9N6J6Y2"
+    measurementId: "G-KBF4METH5J"
 };
-const PORT = process.env.PORT || 3000; // Use process.env.PORT for Render
-const API_ROOT = '/game-api/v1';
 
-// --- 2. FIREBASE ADMIN INITIALIZATION (MOCKED) ---\r\n
-// Since the 'require' for the service account fails in this environment, 
-// we explicitly mock the necessary admin objects to prevent crashes and enable mocked auth.
+// This app ID is not strictly needed for the Realtime Database path 'users/{userID}', 
+// but we keep it defined for potential future use.
+const APP_ID = 'prodigy-definitive-edition'; // Mock...
 
-let dbAdmin = {
-    // Mocking the necessary RTDB functions
-    ref: (db, path) => ({ path }),
-    get: async (ref) => ({ val: () => null }), // Always return null (no save data)
-    set: async (ref, data) => { console.log(`[RTDB MOCK] Data saved to ${ref.path}`); }
-};
-let authAdmin = admin.auth(); // Use the mocked auth object
+// --- 2. FIREBASE ADMIN INITIALIZATION ---
 
-console.warn("[SERVER WARNING] Firebase Admin SDK is mocked. Real authentication and RTDB persistence are simulated.");
+initializeApp({
+    credential: applicationDefault(),
+    databaseURL: FIREBASE_CONFIG.databaseURL, // Initialize with RTDB URL
+});
 
+// Change: Initialize Realtime Database
+const rtdb = getDatabase(); 
+// NEW: Initialize Firebase Auth
+const auth = getAuth(); 
+const PORT = process.env.PORT || 3000;
 
-// --- 3. EXPRESS APP AND MIDDLEWARE ---\r\n
+// --- 3. EXPRESS APP SETUP ---
 
 const app = express();
-app.use(express.json());
-app.use(cors());
-app.use(express.static('public'));
-
-// --- 4. SOCKET.IO SETUP ---\r\n
-
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: "*", 
-        methods: ["GET", "POST"]
-    }
-});
-
-// --- 5. SOCKET.IO MULTIPLAYER LOGIC ---\r\n
-
-// Mock storage for connected users/worlds (in-memory)
-const worldUsers = new Map();
-
-// CHANGE: Made the connection handler async to allow for token verification
-io.on('connection', async (socket) => {
-    console.log(`[SOCKET] User connected: ${socket.id}`);
-    console.log(`[SOCKET DEBUG] Handshake Query:`, socket.handshake.query);
-
-    socket.on('clientLog', (logs) => {
-        console.log(`[CLIENT LOG from ${socket.id}]:`, ...logs);
-    });
-    
-    // Extract connection details from query.
-    const { worldId, userToken, zone } = socket.handshake.query;
-    let userId; // Will be set after token validation (or temporarily assigned)
-
-    if (!worldId) {
-        console.warn(`[SOCKET ERROR] Connection attempt rejected due to missing worldId for socket: ${socket.id}.`);
-        socket.disconnect(true);
-        return;
-    }
-
-    // --- Authentication Logic (Now ASYNC to verify token if present) ---
-    // If a token is provided and Firebase Admin Auth is initialized, attempt verification.
-    if (userToken && userToken.length > 30) { 
-        try {
-            // Use the mocked verifyIdToken
-            const decodedToken = await authAdmin.verifyIdToken(userToken);
-            userId = decodedToken.uid; // Set to the mock Firebase UID ('mock-firebase-uid-123')
-            console.log(`[SOCKET AUTH MOCK SUCCESS] User ${userId} authenticated via Handshake Token.`);
-        } catch (error) {
-            // Token verification failed (shouldn't happen with the mock unless no token is provided)
-            console.warn(`[SOCKET WARNING] Handshake Token failed verification: ${error.message}. Falling back to anonymous.`);
-            userId = `ANON_${socket.id}`;
-        }
+// Socket.IO Server initialization
+const io = new Server(server, { 
+    cors: { 
+        origin: '*',
+        // Allow the query parameters the client sends for connection
+        credentials: true
     } 
-    
-    // If verification failed or no token was provided, fall back to anonymous ID.
-    if (!userId) {
-        userId = `ANON_${socket.id}`;
-        console.log(`[SOCKET INFO] No UserToken provided. Using temporary anonymous ID: ${userId}`);
-    }
-    // --- END Authentication Logic ---
+}); 
 
-    socket.join(worldId);
-    
-    if (!worldUsers.has(worldId)) {
-        worldUsers.set(worldId, new Map());
-    }
-    worldUsers.get(worldId).set(userId, { socketId: socket.id, zone: zone });
-    
-    console.log(`[SOCKET SUCCESS] User ${userId} joined World ID: ${worldId} in Zone: ${zone}. Current users in world: ${worldUsers.get(worldId).size}`);
-    
-    socket.to(worldId).emit('playerJoined', userId);
+app.use(cors()); // Enable CORS for all routes
+app.use(express.json()); // Middleware to parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Middleware to parse URL-encoded bodies
 
-    const playerList = Array.from(worldUsers.get(worldId).keys());
-    socket.emit('playerList', playerList);
+// Serve static files (assuming game client files are in a 'public' directory)
+app.use(express.static(path.join(__dirname, 'public')));
 
-    // HANDLER: Allows the client to upgrade from an anonymous ID to a real ID after HTTP authentication
-    socket.on('resolveAuth', (newUserId) => {
-        const currentWorldId = socket.handshake.query.worldId;
-        
-        if (!currentWorldId || !newUserId || !worldUsers.has(currentWorldId)) {
-            console.warn(`[SOCKET RESOLVE] Failed: Missing worldId or newUserId, or world not tracked.`);
-            return;
-        }
-        
-        const users = worldUsers.get(currentWorldId);
-        
-        if (users.has(userId) && userId !== newUserId) {
-            const oldUserId = userId;
-            
-            users.delete(oldUserId);
-            userId = newUserId; 
-            users.set(newUserId, { socketId: socket.id, zone: socket.handshake.query.zone });
-            
-            console.log(`[SOCKET RESOLVE SUCCESS] ${oldUserId} resolved to authenticated UID ${newUserId}.`);
-            
-            socket.to(currentWorldId).emit('playerLeft', oldUserId);
-            socket.to(currentWorldId).emit('playerJoined', newUserId);
-            
-            const playerList = Array.from(users.keys());
-            socket.emit('playerList', playerList);
-            
-        } else {
-            console.warn(`[SOCKET RESOLVE] Failed: User ${userId} is already authenticated or not found in worldUsers.`);
-        }
-    });
-
-    socket.on('gameMessage', (message) => {
-        // Only allow messages from resolved users (not ANON_)
-        if (userId.startsWith('ANON_')) {
-            console.warn(`[SOCKET REJECT] Anonymous user ${userId} attempted to send a game message.`);
-            return;
-        }
-        
-        socket.to(worldId).emit('message', {
-            sender: userId,
-            content: message
-        });
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`[SOCKET] User disconnected: ${socket.id}, UserID: ${userId}`);
-
-        if (worldUsers.has(worldId)) {
-            const users = worldUsers.get(worldId);
-            if (users.delete(userId)) {
-                socket.to(worldId).emit('playerLeft', userId);
-                if (users.size === 0) {
-                    worldUsers.delete(worldId);
-                    console.log(`[WORLD] World ${worldId} is now empty and removed from tracking.`);
-                }
-            }
-        }
-    });
+// ** NEW: Route to serve the main index.html file **
+app.get('/', (req, res) => {
+    // This assumes your main HTML file is named 'index.html' and is in the 'public' directory.
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// --- 6. AUTHENTICATED API ENDPOINTS (Express Router) ---\r\n
+// --- 3.5. NEW ENDPOINT: /game-api/status (For client's ApiClient.s('/status') ) ---
 
-// Middleware now verifies Firebase ID Token
-const authMiddleware = async (req, res, next) => {
-    // Client must send the Firebase ID Token in the 'auth-key' header or query/body.
-    const uniqueKey = req.headers['auth-key'] || req.body.token || req.query.token;
-    
-    if (!uniqueKey) {
-        return res.status(401).send({ error: 'Unauthorized: Missing token.' });
-    }
-
-    try {
-        // Use the mocked verifyIdToken
-        const decodedToken = await authAdmin.verifyIdToken(uniqueKey);
-        req.userID = decodedToken.uid;
-        console.log(`[AUTH MOCK SUCCESS] Token verified for UID: ${req.userID}`);
-        next();
-    } catch (error) {
-        console.warn(`[API] Auth failed for request to ${req.path}. Token verification error: ${error.message}`);
-        res.status(401).send({ error: 'Unauthorized: Invalid Firebase ID Token.' });
-    }
-};
-
-const apiRouter = express.Router();
-apiRouter.use(authMiddleware);
-
-// Endpoint 1: Cloud Save Data (GET) - Fetches data from RTDB
-apiRouter.get('/save', async (req, res) => {
-    // NOTE: This endpoint now uses the MOCKED dbAdmin, which always returns null, 
-    // forcing the default structure below.
-    const userID = req.userID;
-    
-    console.log(`[RTDB MOCK] No data found for user ${userID}. Returning default structure.`);
-    let saveData = {
-        userID: userID, 
-        name: "Mock Wizard", // Changed name to reflect mock state
-        pet: { type: "epona" },
-        isMember: false,
-        appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
-        gold: 100,
-        level: 1,
-        lastModified: Date.now(),
-        isGoogleAuthenticated: false
-    };
-
-    const responseData = {
-        save: saveData,
-        loggedIn: true 
-    };
-    
-    return res.status(200).send(responseData);
-});
-
-// Endpoint 3: Save Game Data (POST) - Saves data to RTDB (MOCKED)
-apiRouter.post('/save', async (req, res) => {
-    const userID = req.userID;
-    const clientSaveData = req.body.save;
-
-    if (!clientSaveData) {
-        return res.status(400).send({ error: "Missing save data in request body." });
-    }
-
-    clientSaveData.lastModified = Date.now();
-    clientSaveData.userID = userID; 
-
-    // MOCK: Simulate database save operation
-    console.log(`[RTDB MOCK] Data successfully saved for user ${userID}.`);
-
-    res.status(200).send({
-        lastModified: clientSaveData.lastModified
-    });
-});
-
-// Endpoint 4 & 5 (Account): Omitted for brevity, but exist and use authMiddleware
-
-// --- 7. UNATHENTICATED API ENDPOINTS (App) ---
-
-// Endpoint A: Mock World List 
-app.get(`${API_ROOT}/worlds`, (req, res) => {
-    console.log("[RESPONSE] Returning mock world list.");
-    const worldsArray = [
-        // This logic correctly counts active players per world
-        { id: "1", name: "Dark Tower", activePlayers: worldUsers.has("1") ? worldUsers.get("1").size : 0, zone: "tower" },
-        { id: "2", name: "Shiverchill", activePlayers: worldUsers.has("2") ? worldUsers.get("2").size : 0, zone: "town" },
-        { id: "3", name: "Bonfire Spire", activePlayers: worldUsers.has("3") ? worldUsers.get("3").size : 0, zone: "spire" }
-    ];
-    res.status(200).send(worldsArray);
-});
-
-// Endpoint B: Mock Status Check
+/**
+ * Handles GET requests to load the /game-api/status endpoint.
+ * This is used by the client for server health checks.
+ */
 app.get('/game-api/status', (req, res) => {
-    console.log("[RESPONSE] Returning mock status OK.");
-    res.status(200).send({ status: "OK" });
+    console.log("[RESPONSE] /game-api/status endpoint hit. Reporting UP.");
+    // Return a simple JSON indicating success
+    return res.status(200).send({
+        success: true,
+        message: "Server is online and healthy.",
+        serverTime: Date.now()
+    });
 });
 
-// Endpoint C: Mock Authentication (POST) - Login/Create Endpoint
-app.post(`${API_ROOT}/account/save`, async (req, res) => {
-    let providedUserID = req.body.userID || req.body.save?.userID;
-    
-    // Determine the UID for the custom token
-    let finalUserID = providedUserID;
 
-    if (!finalUserID || finalUserID.startsWith('anon-')) {
-        // Simulate new user creation: generate a pseudo-UID for the database path
-        finalUserID = `mock-user-${crypto.randomBytes(6).toString('hex')}`; 
-        console.log(`[LOGIN/CREATE] Simulating new mock user UID: ${finalUserID}.`);
-    } else {
-        console.log(`[LOGIN/CREATE] Using provided UID: ${finalUserID}.`);
+// --- 4. AUTHENTICATION UTILITY ---
+
+/**
+ * Extracts the user token string (l.uniqueKey) from common request locations (headers, query, body).
+ * This token is expected to be a Firebase ID Token generated by the client upon login.
+ * @param {object} req - Express request object.
+ * * @returns {string | null} The extracted token string or null if not found.
+ */
+function extractUserToken(req) {
+    // Check headers first (auth-key and token are common client headers)
+    const authKey = req.headers['auth-key'];
+    const token = req.headers.token;
+    // Check query and body for the token string
+    const userTokenQuery = req.query.userToken;
+    const userTokenBody = req.body.userToken;
+
+    // Log the received values for debugging the client side
+    console.log(`[DEBUG AUTH] Received 'auth-key' (Token candidate): ${authKey}`);
+    console.log(`[DEBUG AUTH] Received 'token' (Token candidate): ${token}`);
+    console.log(`[DEBUG AUTH] Received 'userToken' query param: ${userTokenQuery}`);
+    console.log(`[DEBUG AUTH] Received 'userToken' body param: ${userTokenBody}`);
+
+    // Prioritize the token string sent by the client's internal uniqueKey
+    const userToken = authKey || token || userTokenQuery || userTokenBody;
+    
+    return userToken || null;
+}
+
+/**
+ * Verifies the token found in the request and returns the authenticated Firebase UID.
+ * @param {object} req - Express request object.
+ * @returns {Promise<string | null>} The Firebase UID (user.uid) or null if authentication fails.
+ */
+async function authenticateRequest(req) {
+    const userToken = extractUserToken(req);
+
+    if (!userToken) {
+        console.log("[AUTH] No token found in request, authentication failed.");
+        return null;
     }
+
+    try {
+        // Verify the Firebase ID Token
+        const decodedToken = await auth.verifyIdToken(userToken);
+        const uid = decodedToken.uid;
+        
+        // ** LOGGING ADDITION FOR LOGIN SUCCESS **
+        const email = decodedToken.email || 'N/A';
+        console.log(`[AUTH SUCCESS] User successfully logged in (Token Verified). UID: ${uid}, Email: ${email}`);
+        // ** END LOGGING ADDITION **
+        
+        return uid;
+    } catch (error) {
+        // If token verification fails (expired, invalid, malformed), log and treat as unauthenticated
+        console.error("[AUTH ERROR] Failed to verify token. Code:", error.code);
+        return null;
+    }
+}
+
+
+// --- 5. GAME API ENDPOINTS: /game-api/v1/worlds (FIXED FOR SORTING) ---
+
+/**
+ * Handles GET requests to load the list of available worlds.
+ * Sends a flat array of world objects, which is required for the client's
+ * getSuggested function to successfully call .sort().
+ */
+app.get('/game-api/v1/worlds', (req, res) => {
+    
+    // Helper function to create a world object with all required properties
+    const createWorld = (id, name, fullAmount) => ({
+        id: id,
+        name: name,
+        icon: "fire",
+        path: "/worlds/fireplane", 
+        full: fullAmount,          // CRITICAL: Used for e.full - t.full (number)
+        players: fullAmount, 
+        maxPlayers: 100,
+        "0": 0 
+    });
+
+    // Provide at least 6 unique worlds to prevent array indexing errors inside getSuggested
+    const worldList = [
+        createWorld(1, "Fireplane 1", 10),
+        createWorld(2, "Fireplane 2", 20),
+        createWorld(3, "Tundra 3", 30),
+        createWorld(4, "Volcano 4", 40),
+        createWorld(5, "Crystal 5", 50),
+        createWorld(6, "Ocean 6", 60)
+    ];
+
+    console.log("[RESPONSE] Successfully sent world list as a sortable array.");
+    
+    // The client's getSuggested function expects the Array directly.
+    return res.status(200).send(worldList); 
+});
+
+// ** ACCOUNT API ENDPOINTS **
+// Handles the general /game-api/v1/account path used by the client for profile/status checks.
+
+// GET /game-api/v1/account
+app.get('/game-api/v1/account', async (req, res) => {
+    const userID = await authenticateRequest(req);
+
+    if (!userID) {
+        console.error("[ERROR] API account status attempt failed: Missing or invalid user token.");
+        // Must return the specific error message the client expects if authentication fails
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token"
+        });
+    }
+
+    console.log(`[ACCOUNT API] User ${userID} requested account status.`);
+
+    // Mock response for account status
+    return res.status(200).send({
+        success: true,
+        // The client often expects its ID back as 'uniqueKey'
+        uniqueKey: userID, 
+        // Mock data to satisfy common client checks (e.g., membership status)
+        isMember: true, 
+        currentWorld: "Fireplane 1",
+        displayName: "Authenticated Wizard"
+    });
+});
+
+// POST /game-api/v1/account
+app.post('/game-api/v1/account', async (req, res) => {
+    const userID = await authenticateRequest(req);
+
+    if (!userID) {
+        console.error("[ERROR] API account update attempt failed: Missing or invalid user token.");
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token"
+        });
+    }
+
+    const updateData = req.body;
+    console.log(`[ACCOUNT API] User ${userID} updated account settings:`, updateData);
+
+    // In a real scenario, this would save settings to the RTDB.
+    
+    return res.status(200).send({
+        success: true,
+        message: "Account settings updated successfully.",
+        uniqueKey: userID 
+    });
+});
+
+
+// ** Existing Endpoint: Placeholder for client's initial login/authentication confirmation **
+/**
+ * This endpoint is critical for the client's initial login/registration handshake.
+ * It acts as the API gateway to confirm user creation/login and return the required 'uniqueKey'.
+ * This is necessary because the client expects this specific HTTP response after login.
+ */
+app.post('/game-api/v1/account/save', (req, res) => {
+    // When the client needs an ID, it sends user data (likely including its desired UID or email).
+    // NOTE: In a real app, this endpoint would trigger a real Firebase sign-in and return the ID Token.
+    const requestedID = req.body.userID || req.body.email || 'guest_user_' + Date.now();
+    
+    console.log(`[ACCOUNT] Simulated successful account save/registration for ID: ${requestedID}`);
+
+    // The client needs a 'uniqueKey' (the UID) back to set its internal state (l.uniqueKey).
+    // For the mock, we return the requestedID, but subsequent requests must use a real ID Token.
+    return res.status(200).send({
+        success: true,
+        uniqueKey: requestedID, // Send the ID back to satisfy the client's internal check
+        // Add other account details the client might expect:
+        displayName: 'GuestWizard',
+        email: 'guest@example.com'
+    });
+});
+
+// ** NEW ENDPOINT: /game-api/v1/inventory (Mock Item Loading) **
+// This endpoint is often hit immediately after save/account endpoints to load player gear and items.
+app.get('/game-api/v1/inventory', async (req, res) => {
+    const userID = await authenticateRequest(req);
+
+    if (!userID) {
+        console.error("[ERROR] API inventory access attempt failed: Missing or invalid user token.");
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token"
+        });
+    }
+
+    console.log(`[INVENTORY API] User ${userID} requested inventory data.`);
+
+    // Mock inventory response structure, typically an object containing items and other resources.
+    const mockInventory = {
+        success: true,
+        // Mock list of item IDs the player owns
+        items: [1000, 1001, 2005, 3010],
+        // Mock equipment
+        equipment: {
+            hat: 1000,
+            weapon: 2005,
+            trinket: null
+        },
+        // Mock resources
+        currency: {
+            gold: 500,
+            shards: 10
+        }
+    };
+
+    return res.status(200).send(mockInventory);
+});
+
+// --- 8.7. NEW ENDPOINT: /game-api/v1/zones/switch (POST: Switch Zone/Server) ---
+/**
+ * Handles the client's request to switch zones or servers (multiplayer instance).
+ * It authenticates the user and returns success codes required by the client's ApiClient.
+ */
+app.post('/game-api/v1/zones/switch', async (req, res) => {
+    const userID = await authenticateRequest(req);
+
+    if (!userID) {
+        console.error("[ERROR] API zone switch attempt failed: Missing or invalid user token.");
+        // Returns 401: Unauthorized
+        return res.status(401).send({ 
+            success: false, 
+            message: "Unauthorized: Missing or invalid user token."
+        });
+    }
+
+    const { zoneName } = req.body; 
+
+    if (!zoneName) {
+        console.error(`[ERROR] Zone switch failed for user ${userID}: Missing zoneName in request.`);
+         return res.status(400).send({ 
+            success: false, 
+            message: "Bad Request: Missing zoneName."
+        });
+    }
+
+    // In a real application, you would:
+    // 1. Log the user's new zone/server location.
+    // 2. Potentially update their RTDB save data with the new zone (if needed for persistence).
+    
+    console.log(`[ZONE SWITCH] User ${userID} requested switch to zone: ${zoneName}. Responding 200.`);
+
+    // Respond with 200 (Success) to satisfy the client's API call handler.
+    return res.status(200).send({
+        success: true,
+        message: `Successfully switched to zone ${zoneName}.`
+    });
+});
+
+// --- 6. GAME API ENDPOINTS: /game-api/v1/multiplayer/connect (SOCKET.IO HANDLER) ---
+
+// The client expects io.connect(c.url.multiplayer)
+// Since this server handles all routes, we use the root namespace / for multiplayer
+io.on('connection', async (socket) => { // Made handler async for token verification
+    // Extract query parameters from the client's connection request
+    let { worldId, userToken, zone } = socket.handshake.query;
+
+    console.log(`[SOCKET.IO] New connection attempt to World ID: ${worldId}, Zone: ${zone}`);
+
+    let authenticatedUID = null;
+    if (userToken) {
+        try {
+            // Step 1: Verify the token and get the real UID (user.uid)
+            const decodedToken = await auth.verifyIdToken(userToken);
+            authenticatedUID = decodedToken.uid;
+            console.log(`[SOCKET.IO AUTH] Token verified. Using authenticated UID: ${authenticatedUID}`);
+        } catch (error) {
+            // If token fails verification (e.g., expired or invalid)
+            console.error("[SOCKET.IO ERROR] Token verification failed:", error.code);
+        }
+    }
+    
+    // Step 2: Check for valid credentials (Must have a verified UID and a worldId)
+    if (!authenticatedUID || !worldId) { 
+        console.error("[SOCKET.IO ERROR] Connection rejected: Missing required worldId or failed token verification (No authenticated UID).");
+        // Use socket.disconnect() to trigger the client's 'error' and '503' handlers
+        socket.emit('error', { code: '503', message: 'Missing or invalid user credentials. Authentication failed.' });
+        return socket.disconnect(true);
+    }
+
+    // Use the authenticated UID as the final userId for the connection
+    const userId = authenticatedUID;
+
+    // Step 3: Proceed with connection using the verified userId
+    // The room name is constructed using ONLY the selected world's ID.
+    const worldRoomName = `world-${worldId}`; 
+    socket.join(worldRoomName);
+
+    console.log(`[SOCKET.IO] User ${userId} successfully joined the world-specific room: ${worldRoomName}`); 
+
+    // 4. Send a simulated playerList to satisfy the client's l.socket.on("playerList")
+    // NOTE: In a real app, this list would be dynamically maintained.
+    const mockPlayerList = [
+        { id: 'mock-1', name: 'Bob', position: [100, 100] },
+        { id: 'mock-2', name: 'Alice', position: [200, 200] },
+        // Add the current user to the list
+        { id: userId, name: 'Current Wizard', position: [500, 500] } 
+    ];
+    socket.emit('playerList', mockPlayerList);
+    console.log(`[SOCKET.IO] Emitted 'playerList' to ${userId}.`);
+
+    // 5. Broadcast the new player joining to others in the room
+    socket.to(worldRoomName).emit('playerJoined', userId);
+
+    // 6. Handle incoming messages 
+    socket.on('message', (data) => {
+        console.log(`[SOCKET.IO MESSAGE] From ${userId} in ${worldRoomName}:`, data);
+        socket.to(worldRoomName).emit('message', data);
+    });
+
+    // 7. Handle disconnect
+    socket.on('disconnect', () => {
+        console.log(`[SOCKET.IO] User ${userId} disconnected from room: ${worldRoomName}`);
+        // Broadcast player left event to others (triggers client's l.socket.on("playerLeft"))
+        socket.to(worldRoomName).emit('playerLeft', userId);
+    });
+});
+
+
+// --- 7. GAME API ENDPOINTS: /game-api/v1/save (GET: LOAD WIZARD DATA) ---
+
+/**
+ * This endpoint acts as the API gateway for the client's wizard data load request.
+ * It is required because the client is hardcoded to call this specific HTTP route.
+ * It translates the client's HTTP request into a Firebase Realtime Database read operation.
+ */
+app.get('/game-api/v1/save', async (req, res) => {
+    // --- DEBUG LOGGING ---
+    console.log("\n[DEBUG] --- START /game-api/v1/save (GET) Request Analysis ---");
+    console.log("[DEBUG] Headers Received:", req.headers['auth-key'], req.headers.token);
+    console.log("[DEBUG] Query Params Received:", req.query.userToken);
+    console.log("[DEBUG] Body Params (N/A for GET, check POST) ---");
+    console.log("[DEBUG] --------------------------------------------------------");
+    
+    // ** Authentication Fix: Check for User ID/Token first **
+    const userID = await authenticateRequest(req); // USE NEW AUTH FUNCTION (UID from token)
+
+    if (!userID) {
+        console.error("[ERROR] API save access attempt failed: Missing or invalid user token.");
+        // Use 403 Forbidden or 400 Bad Request and the EXACT error message
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token" // Must match client expectation
+        });
+    }
+    // ** End Authentication Fix **
     
     try {
-        // MOCK: Generate a custom token (which is just the UID prefixed in this mock)
-        const customToken = await authAdmin.createCustomToken(finalUserID);
-        console.log(`[AUTH MOCK] Generated Custom Token for UID: ${finalUserID}`);
+        // Change: Use Realtime Database reference for users/{userID} (which is the UID)
+        const userRef = ref(rtdb, `users/${userID}`);
+        const snapshot = await get(userRef);
 
-        // Client will exchange this customToken for an ID Token on the client side. 
-        res.status(200).send({
-            userID: finalUserID,
-            uniqueKey: customToken, // Send the mock Custom Token
-            loggedIn: true
+        // --- UPDATED LOAD LOGIC: Combine checks for non-existent or null data ---
+        let wizardData = snapshot.val(); 
+        
+        if (!snapshot.exists() || !wizardData) {
+            console.log(`[RESPONSE] No save data found for user ${userID}.`);
+            // Client expects 'wizard: null' if no save exists
+            return res.status(200).send({
+                success: true,
+                wizard: null, 
+                message: "No existing save data found."
+            });
+        }
+
+        console.log(`[RESPONSE] Successfully retrieved wizard save for user ${userID}.`);
+
+        // The client expects the full 'save' object in the 'wizard' key.
+        return res.status(200).send({
+            success: true,
+            wizard: wizardData, // Sending the full save object
+            message: "Wizard data loaded successfully."
         });
+
     } catch (error) {
-        console.error(`[AUTH ERROR] Failed to create custom token for ${finalUserID}:`, error.message);
-        res.status(500).send({ error: "Failed to generate authentication token." });
+        console.error(`[ERROR] Realtime Database operation failed for user ${userID}:`, error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error during database lookup.",
+            error: error.message
+        });
     }
 });
 
+// --- 8. GAME API ENDPOINTS: /game-api/v1/save (POST: SAVE WIZARD DATA) ---
 
-// Attach all authenticated API routes
-app.use(API_ROOT, apiRouter);
+/**
+ * This endpoint acts as the API gateway for the client's wizard data save request.
+ * It is required because the client is hardcoded to call this specific HTTP route.
+ * It translates the client's HTTP request into a Firebase Realtime Database write operation.
+ */
+app.post('/game-api/v1/save', async (req, res) => {
+    // ** Authentication Check **
+    const userID = await authenticateRequest(req); // USE NEW AUTH FUNCTION (UID from token)
+
+    if (!userID) {
+        console.error("[ERROR] API save attempt failed: Missing or invalid user token.");
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token"
+        });
+    }
+
+    // The client sends the full save object in the request body.
+    const saveObject = req.body; 
+
+    // Validate that the save object contains expected data (e.g., appearance data)
+    if (!saveObject || !saveObject.appearancedata) {
+        console.error(`[ERROR] Save failed for user ${userID}: Invalid or missing save data in request body.`);
+         return res.status(400).send({ 
+            success: false, 
+            message: "Invalid save data provided."
+        });
+    }
+
+    try {
+        // Change: Use Realtime Database reference for users/{userID}
+        const userRef = ref(rtdb, `users/${userID}`);
+        
+        // Store the entire client 'save' object directly at the users/{userID} path.
+        await set(userRef, saveObject);
+
+        console.log(`[RESPONSE] Successfully saved wizard data for user ${userID}.`);
+
+        return res.status(200).send({
+            success: true,
+            message: "Wizard data saved successfully."
+        });
+
+    } catch (error) {
+        console.error(`[ERROR] Realtime Database save operation failed for user ${userID}:`, error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error during database save.",
+            error: error.message
+        });
+    }
+});
+
+// --- 8.5. NEW MOCK ENDPOINT: /game-api/v1/cloud/save (Handles client's getCloudSave post-login) ---
+
+/**
+ * Handles the client's request to load 'old' save data immediately after a successful Google login.
+ * This endpoint is critical for setting up the game state (like old.cloudSaveData) and must return 
+ * a structured object containing the wizard save data or null if none exists.
+ */
+app.get('/game-api/v1/cloud/save', async (req, res) => {
+    const userID = await authenticateRequest(req); 
+    const isMock = true; // Flag for this mock endpoint
+
+    if (!userID) {
+        console.error("[ERROR] API cloud save access attempt failed: Missing or invalid user token.");
+        return res.status(403).send({ 
+            success: false, 
+            message: "missing user id or token"
+        });
+    }
+
+    // Mock Save Structure - This mimics the format the client expects
+    const mockSaveData = {
+        save: {
+            // Minimal required keys to prevent client errors
+            name: "Mock Wizard",
+            pet: { type: "epona" },
+            isMember: false,
+            appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
+            // Add other mock data needed by the client, such as gold or level, to ensure the game loads
+            gold: 500,
+            level: 1,
+            // The client expects a timestamp for 'lastModified'
+            lastModified: Date.now() 
+        },
+        // CRITICAL FIX: The client checks for this flag in the response to set network.loggedIn
+        loggedIn: true
+    };
+
+    console.log(`[RESPONSE] Successfully returned mock cloud save for user ${userID} (Post-Login).`);
+
+    // The client expects the full 'save' object directly in the response root if successful.
+    // In this path, the client expects the object containing the 'save' property.
+    return res.status(200).send(mockSaveData); 
+});
 
 
-// --- 9. START SERVER ---\r\n
+// --- 9. START SERVER ---
 
 server.listen(PORT, () => {
     console.log(`\n🎉 Server is running and serving game at http://localhost:${PORT}`);
-    console.log(`Serving static content from: /public`);
-    console.log(`API Endpoints: /game-api/v1/worlds (UNAUTHENTICATED), /game-api/v1/save (GET & POST), /game-api/v1/account, /game-api/status`);
-    console.log(`Multiplayer Socket: ws://localhost:${PORT}`);
-    console.log("NOTE: Authentication is MOCKED. The client must still send a token, which will resolve to 'mock-firebase-uid-123'.");
+    console.log(`API Endpoints: /game-api/v1/worlds, /game-api/v1/save (GET & POST), /game-api/v1/account/save, /game-api/v1/account (GET & POST), /game-api/v1/cloud/save, /game-api/v1/inventory (NEW), /game-api/v1/zones/switch (NEW), /game-api/status (NEW) and WebSocket/Socket.IO listener for multiplayer connect`);
 });
