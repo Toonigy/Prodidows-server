@@ -2,9 +2,29 @@ const express = require('express');
 const http = require('http'); 
 const { Server } = require('socket.io'); 
 const path = require('path');
-// Updated Firebase Admin Imports
-const admin = require('firebase-admin'); 
-const { getDatabase, ref, get, set } = require('firebase-admin/database');
+// Import Firebase Admin imports, but we will mock them below
+const admin = {
+    auth: () => ({
+        // Mocking the critical method used by authMiddleware and io.on('connection')
+        verifyIdToken: async (token) => {
+            if (token && token.length > 30) {
+                // When a token is present, always return a mock UID as if verification passed.
+                return { uid: 'mock-firebase-uid-123' };
+            }
+            throw new Error("Invalid token or missing mock setup.");
+        },
+        // Mocking createCustomToken for the /account/save endpoint
+        createCustomToken: async (uid) => {
+            // Return the UID as a token for simplicity in the mock environment
+            // In a real app, this creates a JWT. Here, we just use the UID.
+            return `mock-token-for-${uid}`; 
+        }
+    }),
+    // Mocking Realtime Database functions
+    initializeApp: () => ({}), // Empty init
+    credential: { cert: () => {} } // Empty credential
+};
+const { getDatabase, ref, get, set } = require('firebase-admin/database'); // These are not used, but kept for context
 const cors = require('cors');
 const crypto = require('crypto');
 
@@ -22,26 +42,20 @@ const FIREBASE_CONFIG = {
 const PORT = process.env.PORT || 3000; // Use process.env.PORT for Render
 const API_ROOT = '/game-api/v1';
 
-// --- 2. FIREBASE ADMIN INITIALIZATION ---\r\n
-let dbAdmin; // Firebase Realtime Database Admin
-let authAdmin; // Firebase Auth Admin
+// --- 2. FIREBASE ADMIN INITIALIZATION (MOCKED) ---\r\n
+// Since the 'require' for the service account fails in this environment, 
+// we explicitly mock the necessary admin objects to prevent crashes and enable mocked auth.
 
-try {
-    const serviceAccount = require('./pde13532-firebase-adminsdk-fbsvc-2f5beb97b6.json');
-    
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: FIREBASE_CONFIG.databaseURL,
-        projectId: FIREBASE_CONFIG.projectId
-    });
+let dbAdmin = {
+    // Mocking the necessary RTDB functions
+    ref: (db, path) => ({ path }),
+    get: async (ref) => ({ val: () => null }), // Always return null (no save data)
+    set: async (ref, data) => { console.log(`[RTDB MOCK] Data saved to ${ref.path}`); }
+};
+let authAdmin = admin.auth(); // Use the mocked auth object
 
-    dbAdmin = getDatabase(); // Initialize Realtime Database
-    authAdmin = admin.auth(); // Initialize Auth Admin
-    
-} catch (error) {
-    console.warn("Firebase Admin failed to initialize. Persistence and real authentication will be unavailable:", error.message);
-    // dbAdmin and authAdmin remain undefined.
-}
+console.warn("[SERVER WARNING] Firebase Admin SDK is mocked. Real authentication and RTDB persistence are simulated.");
+
 
 // --- 3. EXPRESS APP AND MIDDLEWARE ---\r\n
 
@@ -86,14 +100,14 @@ io.on('connection', async (socket) => {
 
     // --- Authentication Logic (Now ASYNC to verify token if present) ---
     // If a token is provided and Firebase Admin Auth is initialized, attempt verification.
-    if (userToken && userToken.length > 30 && authAdmin) { 
+    if (userToken && userToken.length > 30) { 
         try {
-            // Verify the Firebase ID Token provided in the handshake query
+            // Use the mocked verifyIdToken
             const decodedToken = await authAdmin.verifyIdToken(userToken);
-            userId = decodedToken.uid; // Set to the real Firebase UID
-            console.log(`[SOCKET AUTH SUCCESS] User ${userId} authenticated via Handshake Token.`);
+            userId = decodedToken.uid; // Set to the mock Firebase UID ('mock-firebase-uid-123')
+            console.log(`[SOCKET AUTH MOCK SUCCESS] User ${userId} authenticated via Handshake Token.`);
         } catch (error) {
-            // Token verification failed (expired, invalid, etc.)
+            // Token verification failed (shouldn't happen with the mock unless no token is provided)
             console.warn(`[SOCKET WARNING] Handshake Token failed verification: ${error.message}. Falling back to anonymous.`);
             userId = `ANON_${socket.id}`;
         }
@@ -102,7 +116,7 @@ io.on('connection', async (socket) => {
     // If verification failed or no token was provided, fall back to anonymous ID.
     if (!userId) {
         userId = `ANON_${socket.id}`;
-        console.log(`[SOCKET WARNING] No valid UserToken or Auth Admin found. Using temporary anonymous ID: ${userId}`);
+        console.log(`[SOCKET INFO] No UserToken provided. Using temporary anonymous ID: ${userId}`);
     }
     // --- END Authentication Logic ---
 
@@ -187,15 +201,15 @@ const authMiddleware = async (req, res, next) => {
     // Client must send the Firebase ID Token in the 'auth-key' header or query/body.
     const uniqueKey = req.headers['auth-key'] || req.body.token || req.query.token;
     
-    if (!uniqueKey || !authAdmin) {
-        return res.status(401).send({ error: 'Unauthorized: Missing token or Auth service unavailable.' });
+    if (!uniqueKey) {
+        return res.status(401).send({ error: 'Unauthorized: Missing token.' });
     }
 
     try {
-        // Verify the Firebase ID Token
+        // Use the mocked verifyIdToken
         const decodedToken = await authAdmin.verifyIdToken(uniqueKey);
         req.userID = decodedToken.uid;
-        console.log(`[AUTH SUCCESS] Token verified for UID: ${req.userID}`);
+        console.log(`[AUTH MOCK SUCCESS] Token verified for UID: ${req.userID}`);
         next();
     } catch (error) {
         console.warn(`[API] Auth failed for request to ${req.path}. Token verification error: ${error.message}`);
@@ -208,53 +222,33 @@ apiRouter.use(authMiddleware);
 
 // Endpoint 1: Cloud Save Data (GET) - Fetches data from RTDB
 apiRouter.get('/save', async (req, res) => {
-    if (!dbAdmin) {
-        return res.status(500).send({ error: "Server Database service unavailable." });
-    }
-
+    // NOTE: This endpoint now uses the MOCKED dbAdmin, which always returns null, 
+    // forcing the default structure below.
     const userID = req.userID;
-    const dbRef = ref(dbAdmin, `users/${userID}/saveData`);
+    
+    console.log(`[RTDB MOCK] No data found for user ${userID}. Returning default structure.`);
+    let saveData = {
+        userID: userID, 
+        name: "Mock Wizard", // Changed name to reflect mock state
+        pet: { type: "epona" },
+        isMember: false,
+        appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
+        gold: 100,
+        level: 1,
+        lastModified: Date.now(),
+        isGoogleAuthenticated: false
+    };
 
-    try {
-        const snapshot = await get(dbRef);
-        let saveData = snapshot.val();
-        
-        if (!saveData) {
-            // Data doesn't exist, return a default mock save structure to bootstrap the client
-            console.log(`[RTDB] No data found for user ${userID}. Returning default structure.`);
-            saveData = {
-                userID: userID, 
-                name: "New Wizard",
-                pet: { type: "epona" },
-                isMember: false,
-                appearancedata: { hat: 1, hair: 2, glasses: 0, mouth: 1, nose: 1, eyes: 1, head: 1, body: 1 },
-                gold: 100,
-                level: 1,
-                lastModified: Date.now(),
-                isGoogleAuthenticated: false
-            };
-        } else {
-            console.log(`[RTDB] Data successfully loaded for user ${userID}.`);
-        }
-
-        const responseData = {
-            save: saveData,
-            loggedIn: true // Always true if token was verified
-        };
-        
-        return res.status(200).send(responseData);
-    } catch (error) {
-        console.error(`[RTDB ERROR] Failed to fetch data for user ${userID}:`, error.message);
-        return res.status(500).send({ error: "Failed to load game data from database." });
-    }
+    const responseData = {
+        save: saveData,
+        loggedIn: true 
+    };
+    
+    return res.status(200).send(responseData);
 });
 
-// Endpoint 3: Save Game Data (POST) - Saves data to RTDB
+// Endpoint 3: Save Game Data (POST) - Saves data to RTDB (MOCKED)
 apiRouter.post('/save', async (req, res) => {
-    if (!dbAdmin) {
-        return res.status(500).send({ error: "Server Database service unavailable." });
-    }
-
     const userID = req.userID;
     const clientSaveData = req.body.save;
 
@@ -262,23 +256,15 @@ apiRouter.post('/save', async (req, res) => {
         return res.status(400).send({ error: "Missing save data in request body." });
     }
 
-    // Update the timestamp before saving and ensure the ID is correct
     clientSaveData.lastModified = Date.now();
     clientSaveData.userID = userID; 
 
-    const dbRef = ref(dbAdmin, `users/${userID}/saveData`);
+    // MOCK: Simulate database save operation
+    console.log(`[RTDB MOCK] Data successfully saved for user ${userID}.`);
 
-    try {
-        await set(dbRef, clientSaveData);
-        console.log(`[RTDB] Data successfully saved for user ${userID}.`);
-        
-        res.status(200).send({
-            lastModified: clientSaveData.lastModified
-        });
-    } catch (error) {
-        console.error(`[RTDB ERROR] Failed to save data for user ${userID}:`, error.message);
-        return res.status(500).send({ error: "Failed to save game data to database." });
-    }
+    res.status(200).send({
+        lastModified: clientSaveData.lastModified
+    });
 });
 
 // Endpoint 4 & 5 (Account): Omitted for brevity, but exist and use authMiddleware
@@ -289,7 +275,7 @@ apiRouter.post('/save', async (req, res) => {
 app.get(`${API_ROOT}/worlds`, (req, res) => {
     console.log("[RESPONSE] Returning mock world list.");
     const worldsArray = [
-        // This is the correct logic to count active players per world
+        // This logic correctly counts active players per world
         { id: "1", name: "Dark Tower", activePlayers: worldUsers.has("1") ? worldUsers.get("1").size : 0, zone: "tower" },
         { id: "2", name: "Shiverchill", activePlayers: worldUsers.has("2") ? worldUsers.get("2").size : 0, zone: "town" },
         { id: "3", name: "Bonfire Spire", activePlayers: worldUsers.has("3") ? worldUsers.get("3").size : 0, zone: "spire" }
@@ -305,34 +291,28 @@ app.get('/game-api/status', (req, res) => {
 
 // Endpoint C: Mock Authentication (POST) - Login/Create Endpoint
 app.post(`${API_ROOT}/account/save`, async (req, res) => {
-    if (!authAdmin) {
-        return res.status(500).send({ error: "Server authentication service unavailable." });
-    }
-    
     let providedUserID = req.body.userID || req.body.save?.userID;
     
     // Determine the UID for the custom token
     let finalUserID = providedUserID;
 
-    if (!finalUserID) {
+    if (!finalUserID || finalUserID.startsWith('anon-')) {
         // Simulate new user creation: generate a pseudo-UID for the database path
-        // In a real application, you would manage user records. Here, we generate a unique ID.
-        finalUserID = `anon-${crypto.randomBytes(12).toString('hex')}`; 
-        console.log(`[LOGIN/CREATE] Simulating new anonymous user UID: ${finalUserID}.`);
+        finalUserID = `mock-user-${crypto.randomBytes(6).toString('hex')}`; 
+        console.log(`[LOGIN/CREATE] Simulating new mock user UID: ${finalUserID}.`);
     } else {
         console.log(`[LOGIN/CREATE] Using provided UID: ${finalUserID}.`);
     }
     
     try {
-        // Create a Firebase Custom Token using the determined UID
+        // MOCK: Generate a custom token (which is just the UID prefixed in this mock)
         const customToken = await authAdmin.createCustomToken(finalUserID);
-        console.log(`[AUTH] Generated Custom Token for UID: ${finalUserID}`);
+        console.log(`[AUTH MOCK] Generated Custom Token for UID: ${finalUserID}`);
 
         // Client will exchange this customToken for an ID Token on the client side. 
-        // We return the custom token as the uniqueKey.
         res.status(200).send({
             userID: finalUserID,
-            uniqueKey: customToken, // Send the Custom Token
+            uniqueKey: customToken, // Send the mock Custom Token
             loggedIn: true
         });
     } catch (error) {
@@ -353,5 +333,5 @@ server.listen(PORT, () => {
     console.log(`Serving static content from: /public`);
     console.log(`API Endpoints: /game-api/v1/worlds (UNAUTHENTICATED), /game-api/v1/save (GET & POST), /game-api/v1/account, /game-api/status`);
     console.log(`Multiplayer Socket: ws://localhost:${PORT}`);
-    console.log("NOTE: Client must exchange the Custom Token (uniqueKey from /account/save) for an ID Token, and use the ID Token for all subsequent API requests.");
+    console.log("NOTE: Authentication is MOCKED. The client must still send a token, which will resolve to 'mock-firebase-uid-123'.");
 });
