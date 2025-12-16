@@ -160,18 +160,19 @@ app.get('/game-api/v1/worlds', (req, res) => {
     // Helper function to get current user count
     const getUserCount = (worldId) => Object.keys(ROOMS).includes(worldId) ? ROOMS[worldId].size : 0;
     
-    // Return a mock list of worlds formatted according to the client's expected structure.
+    // Construct the worlds array
+    const worldList = [
+        // Updated structure: full maps to user count, added icon and path
+        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: "star", path: "/worlds/astralplane" },
+        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: "fire", path: "/worlds/phoenix" },
+        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: "ice", path: "/worlds/glacier" },
+        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: "bolt", path: "/worlds/nova" }
+    ];
+
+    // CRITICAL FIX: Return ONLY the array (worldList), not an object with a 'worlds' property.
+    // This allows the client's internal `t.sort` function to execute successfully.
     console.log('[API MOCK] Serving mock world list at /game-api/v1/worlds');
-    res.status(200).send({
-        success: true,
-        worlds: [
-            // Updated structure: full maps to user count, added icon and path
-            { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: "star", path: "/worlds/astralplane" },
-            { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: "fire", path: "/worlds/phoenix" },
-            { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: "ice", path: "/worlds/glacier" },
-            { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: "bolt", path: "/worlds/nova" }
-        ]
-    });
+    res.status(200).send(worldList);
 });
 
 // --- 5.3. MOCK ENDPOINT: /game-api/v1/cloud/load ---
