@@ -289,6 +289,7 @@ apiRouter.post('/save', async (req, res) => {
 app.get(`${API_ROOT}/worlds`, (req, res) => {
     console.log("[RESPONSE] Returning mock world list.");
     const worldsArray = [
+        // FIX: Correctly check the size of the inner Map for each world ID
         { id: "1", name: "Dark Tower", activePlayers: worldUsers.has("1") ? worldUsers.get("1").size : 0, zone: "tower" },
         { id: "2", name: "Shiverchill", activePlayers: worldUsers.has("2") ? worldUsers.get("2").size : 0, zone: "town" },
         { id: "3", name: "Bonfire Spire", activePlayers: worldUsers.has("3") ? worldUsers.get("3").size : 0, zone: "spire" }
