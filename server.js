@@ -163,13 +163,9 @@ app.get('/game-api/v1/worlds', (req, res) => {
     
     // Construct the worlds array, adding two new worlds (Magma and Crystal)
     const worldList = [
-        // FIX: Double-nesting the 'icon' object to match expected client structure (icon: { icon: { type: "..." } })
-        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: { icon: { type: "star" } }, path: "/worlds/astralplane" },
-        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: { icon: { type: "fire" } }, path: "/worlds/phoenix" },
-        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: { icon: { type: "ice" } }, path: "/worlds/glacier" },
-        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { icon: { type: "bolt" } }, path: "/worlds/nova" },
-        { id: "Magma", name: "Magma", full: getUserCount("Magma"), icon: { icon: { type: "lava" } }, path: "/worlds/magma" },
-        { id: "Crystal", name: "Crystal", full: getUserCount("Crystal"), icon: { icon: { type: "gem" } }, path: "/worlds/crystal" }
+        { id: "1", name: "Dark Tower", activePlayers: worldUsers.has("1") ? worldUsers.get("1").size : 0, zone: "tower" },
+        { id: "2", name: "Shiverchill", activePlayers: worldUsers.has("2") ? worldUsers.get("2").size : 0, zone: "town" },
+        { id: "3", name: "Bonfire Spire", activePlayers: worldUsers.has("3") ? worldUsers.get("3").size : 0, zone: "spire" }
     ];
 
     // CRITICAL FIX: Return ONLY the array (worldList), not an object with a 'worlds' property.
@@ -310,3 +306,4 @@ app.get('/game-api/v1/cloud/save', async (req, res) => {
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
