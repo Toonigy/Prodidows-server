@@ -3,13 +3,21 @@
  * This data is used to populate the server list for the client.
  */
 const baseWorlds = [
-    // { id: 'academy-1', name: 'Academy', basePath: '/worlds/academy', icon: 'light', maxPlayers: 50 }, // Example of a deleted world
+    // --- Shiverchill Mountain Worlds (Ice Element) ---
     { id: 'shiverchill-1', name: 'Shiverchill Mountain - 1', basePath: '/worlds/shiverchill', icon: 'ice', maxPlayers: 50 },
     { id: 'shiverchill-2', name: 'Shiverchill Mountain - 2', basePath: '/worlds/shiverchill', icon: 'ice', maxPlayers: 50 },
+    { id: 'shiverchill-3', name: 'Shiverchill Mountain - 3', basePath: '/worlds/shiverchill', icon: 'ice', maxPlayers: 50 },
+    { id: 'shiverchill-4', name: 'Shiverchill Mountain - 4', basePath: '/worlds/shiverchill', icon: 'ice', maxPlayers: 50 },
+    
+    // --- Bonfire Spire Worlds (Fire Element) ---
     { id: 'bonfire-1', name: 'Bonfire Spire - 1', basePath: '/worlds/bonfire', icon: 'fire', maxPlayers: 50 },
-    { id: 'bonfire-2', name: 'Bonfire Spire - 2', basePath: '/worlds/bonfire', icon: 'fire', maxPlayers: 50 }, // Added new world
+    { id: 'bonfire-2', name: 'Bonfire Spire - 2', basePath: '/worlds/bonfire', icon: 'fire', maxPlayers: 50 },
+    { id: 'bonfire-3', name: 'Bonfire Spire - 3', basePath: '/worlds/bonfire', icon: 'fire', maxPlayers: 50 },
+    
+    // --- Fireplane Worlds (Fire Element) ---
     { id: 'fireplane-1', name: 'Fireplane - 1', basePath: '/worlds/fireplane', icon: 'fire', maxPlayers: 50 }, 
-    { id: 'fireplane-2', name: 'Fireplane - 2', basePath: '/worlds/fireplane', icon: 'fire', maxPlayers: 50 }, // Added new world
+    { id: 'fireplane-2', name: 'Fireplane - 2', basePath: '/worlds/fireplane', icon: 'fire', maxPlayers: 50 },
+    { id: 'fireplane-3', name: 'Fireplane - 3', basePath: '/worlds/fireplane', icon: 'fire', maxPlayers: 50 }, 
 ];
 
 /**
@@ -37,6 +45,8 @@ const getAvailableWorlds = (activePlayers) => {
                 full: isFull ? 1 : 0, // 0 for available, 1 for full (required)
                 // FIX: Changed 'icon' to 'type'. The client's Util.convertItemToIcon expects the property name 'type'.
                 type: world.icon,     // e.g., 'fire', 'ice' (required)
+                // NEW FIX: Add ID to satisfy Util.convertItemToIcon for creating the icon path (e.g., 'fire/1')
+                ID: 1, 
                 name: world.name,     // e.g., 'Fireplane' (required)
                 path: `${world.basePath}/${world.id}`, // e.g., /worlds/fireplane/fireplane-1 (required for connection)
                 
