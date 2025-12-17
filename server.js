@@ -261,19 +261,19 @@ app.post('/game-api/v1/zones/switch', async (req, res) => {
 // --- 6. SOCKET.IO MULTIPLAYER HANDLER (FIXED DISCONNECT) ---
 
 // The client expects io.connect(c.url.multiplayer)
-io.on('connection', async (socket) => { 
+io.on('connection', async (socket) => {
     let { worldId, userToken, zone } = socket.handshake.query;
 
     console.log(`\n[SOCKET.IO] New connection attempt:`);
-    console.log(`[SOCKET.IO DEBUG] Query: worldId=${worldId}, token present=${!!userToken}`);
+    console.log(`[SOCKET.IO DEBUG] Query: worldId=${worldId}, token present=${!!userToken}, zone=${zone}`);
     
     let authenticatedUID = null;
     if (userToken) {
         try {
-            // Step 1: Verify the token using the MOCKED auth
-            const decodedToken = await auth.verifyIdToken(userToken);
+            // Step 1: Verify the token using the MOCKED auth system
+            const decodedToken = await MOCK_AUTH_SYSTEM.verifyIdToken(userToken);
             authenticatedUID = decodedToken.uid;
-            console.log(`[SOCKET.IO AUTH MOCK] Token verified. UID: ${authenticatedUID}`);
+            console.log(`[SOCKET.IO AUTH SUCCESS] Token verified. UID: ${authenticatedUID}`);
         } catch (error) {
             console.error("[SOCKET.IO ERROR] Token verification failed:", error.message);
         }
