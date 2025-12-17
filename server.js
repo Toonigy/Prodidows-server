@@ -162,11 +162,11 @@ app.get('/game-api/v1/worlds', (req, res) => {
     
     // Construct the worlds array
     const worldList = [
-        // Updated structure: full maps to user count, added icon and path
-        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: "star", path: "/worlds/astralplane" },
-        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: "fire", path: "/worlds/phoenix" },
-        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: "ice", path: "/worlds/glacier" },
-        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: "bolt", path: "/worlds/nova" }
+        // FIXED: The 'icon' property must be an object with a 'type' property
+        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: { type: "star" }, path: "/worlds/astralplane" },
+        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: { type: "fire" }, path: "/worlds/phoenix" },
+        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: { type: "ice" }, path: "/worlds/glacier" },
+        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { type: "bolt" }, path: "/worlds/nova" }
     ];
 
     // CRITICAL FIX: Return ONLY the array (worldList), not an object with a 'worlds' property.
