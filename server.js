@@ -161,13 +161,15 @@ app.get('/game-api/v1/worlds', (req, res) => {
     // Helper function to get current user count
     const getUserCount = (worldId) => Object.keys(ROOMS).includes(worldId) ? ROOMS[worldId].size : 0;
     
-    // Construct the worlds array
+    // Construct the worlds array, adding two new worlds (Magma and Crystal)
     const worldList = [
         // FIX: Double-nesting the 'icon' object to match expected client structure (icon: { icon: { type: "..." } })
         { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: { icon: { type: "star" } }, path: "/worlds/astralplane" },
         { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: { icon: { type: "fire" } }, path: "/worlds/phoenix" },
         { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: { icon: { type: "ice" } }, path: "/worlds/glacier" },
-        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { icon: { type: "bolt" } }, path: "/worlds/nova" }
+        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { icon: { type: "bolt" } }, path: "/worlds/nova" },
+        { id: "Magma", name: "Magma", full: getUserCount("Magma"), icon: { icon: { type: "lava" } }, path: "/worlds/magma" },
+        { id: "Crystal", name: "Crystal", full: getUserCount("Crystal"), icon: { icon: { type: "gem" } }, path: "/worlds/crystal" }
     ];
 
     // CRITICAL FIX: Return ONLY the array (worldList), not an object with a 'worlds' property.
