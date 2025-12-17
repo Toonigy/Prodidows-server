@@ -80,7 +80,8 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     // CRITICAL: Extract the world ID from the handshake query
     const worldID = socket.handshake.query[WORLD_ID_QUERY_PARAM];
-    const userID = socket.handshake.query.userID || 'anonymous'; // Assuming client passes userID
+    // FIX: The client sends 'userId' (lowercase i), so we must read that parameter name.
+    const userID = socket.handshake.query.userId || 'anonymous';
 
     if (!worldID || worldID === 'undefined') {
         console.error(`[SOCKET.IO ERROR] Connection rejected: Missing or invalid ${WORLD_ID_QUERY_PARAM}. User: ${userID}`);
