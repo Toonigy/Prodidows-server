@@ -162,11 +162,11 @@ app.get('/game-api/v1/worlds', (req, res) => {
     
     // Construct the worlds array
     const worldList = [
-        // FIXED: The 'icon' property must be an object with a 'type' property
-        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: { type: "star" }, path: "/worlds/astralplane" },
-        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: { type: "fire" }, path: "/worlds/phoenix" },
-        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: { type: "ice" }, path: "/worlds/glacier" },
-        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { type: "bolt" }, path: "/worlds/nova" }
+        // FIX: Double-nesting the 'icon' object to match expected client structure (icon: { icon: { type: "..." } })
+        { id: "AstralPlane", name: "Astral Plane", full: getUserCount("AstralPlane"), icon: { icon: { type: "star" } }, path: "/worlds/astralplane" },
+        { id: "Phoenix", name: "Phoenix", full: getUserCount("Phoenix"), icon: { icon: { type: "fire" } }, path: "/worlds/phoenix" },
+        { id: "Glacier", name: "Glacier", full: getUserCount("Glacier"), icon: { icon: { type: "ice" } }, path: "/worlds/glacier" },
+        { id: "Nova", name: "Nova", full: getUserCount("Nova"), icon: { icon: { type: "bolt" } }, path: "/worlds/nova" }
     ];
 
     // CRITICAL FIX: Return ONLY the array (worldList), not an object with a 'worlds' property.
