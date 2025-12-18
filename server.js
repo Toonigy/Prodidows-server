@@ -104,26 +104,37 @@ io.on('connection', async (socket) => {
             const userRef = db.ref(`users/${uid}`);
             const userSnapshot = await userRef.get();
             if (userSnapshot.exists()) {
-                let userData = userSnapshot.val();
+                let wizardData = userSnapshot.val();
                 
                 // FIXED: Handle stringified JSON data found in getCloudSave snippet
-                if (typeof userData === "string") {
+                if (typeof wizardData === "string") {
                     try {
-                        userData = JSON.parse(userData);
+                        wizardData = JSON.parse(wizardData);
                     } catch (pErr) {
                         console.error("[JSON PARSE ERROR]", pErr.message);
                     }
                 }
 
-                // Merge database results into current session
+                // If the stored data has a nested 'wizard' key, extract it
+                if (wizardData.wizard) {
+                    wizardData = wizardData.wizard;
+                }
+
+                // Merge database results into current session. 
+                // We ensure 'data' exists to prevent undefined username/name.
                 players[uid] = { 
                     ...players[uid], 
-                    ...userData, 
+                    ...wizardData,
+                    data: {
+                        ...(players[uid].data || {}),
+                        ...(wizardData.data || {}),
+                        name: wizardData.data?.name || wizardData.name || wizardData.nickname || "New Wizard"
+                    },
                     userID: uid, 
                     id: uid 
                 };
                 
-                console.log(`[DB] Restored session for ${uid}. Name: ${players[uid].data?.name || 'Unknown'}`);
+                console.log(`[DB] Restored session for ${uid}. Name: ${players[uid].data.name}`);
             }
         } catch (err) {
             console.error("[DB FETCH ERROR]", err.message);
@@ -195,6 +206,7 @@ io.on('connection', async (socket) => {
     socket.on('player:saveCharacter', async (characterData) => {
         if (db && players[uid] && uid !== socket.id) {
             try {
+                // Ensure we save it in a structure compatible with the client's getCloudSave
                 await db.ref(`users/${uid}`).update(characterData);
                 console.log(`[DB] Saved character for ${uid}`);
             } catch (err) {
