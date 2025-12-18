@@ -79,7 +79,6 @@ io.on('connection', async (socket) => {
     const worldId = (query.worldId || '101').toString();
 
     // Default 'e' object initialization based on PIXI.game.prodigy.player structure
-    // Note: this.game.prodigy.player.appearance.data = save.appearancedata
     players[uid] = {
         id: uid,
         userID: uid, 
@@ -87,7 +86,6 @@ io.on('connection', async (socket) => {
         world: worldId,
         x: 400,
         y: 400,
-        // Aligned with: this.game.prodigy.player.appearance.data structure
         appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
         equipmentdata: { weapon: 1, armor: 1, boots: 1, follow: null },
         data: { 
@@ -106,9 +104,26 @@ io.on('connection', async (socket) => {
             const userRef = db.ref(`users/${uid}`);
             const userSnapshot = await userRef.get();
             if (userSnapshot.exists()) {
-                const userData = userSnapshot.val();
-                players[uid] = { ...players[uid], ...userData, userID: uid, id: uid };
-                console.log(`[DB] Restored session for ${uid}`);
+                let userData = userSnapshot.val();
+                
+                // FIXED: Handle stringified JSON data found in getCloudSave snippet
+                if (typeof userData === "string") {
+                    try {
+                        userData = JSON.parse(userData);
+                    } catch (pErr) {
+                        console.error("[JSON PARSE ERROR]", pErr.message);
+                    }
+                }
+
+                // Merge database results into current session
+                players[uid] = { 
+                    ...players[uid], 
+                    ...userData, 
+                    userID: uid, 
+                    id: uid 
+                };
+                
+                console.log(`[DB] Restored session for ${uid}. Name: ${players[uid].data?.name || 'Unknown'}`);
             }
         } catch (err) {
             console.error("[DB FETCH ERROR]", err.message);
@@ -131,7 +146,6 @@ io.on('connection', async (socket) => {
 
     // --- EVENT HANDLERS ---
 
-    // Movement updates
     socket.on('player:move', (data) => {
         if (players[uid]) {
             players[uid].x = data.x;
@@ -150,7 +164,6 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // Handle Zone Changes (e.g. going to Felspore)
     socket.on('player:zone', (newZone) => {
         if (players[uid]) {
             const oldZone = players[uid].world;
@@ -171,23 +184,17 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // Update event: Handles data from PIXI.game.prodigy.player (equipment, appearance, etc.)
     socket.on('player:update', (data) => {
         if (players[uid]) {
-            // Update server-side state with the full player data object
-            // Ensures appearance updates are stored correctly as appearancedata
             players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
-            
             socket.to(players[uid].world).emit('player:updated', players[uid]);
             io.to("GLOBAL_MONITOR").emit('player:updated', players[uid]);
         }
     });
 
-    // Save Character: Directly handles the 'saveCharacter()' logic from game.min.js
     socket.on('player:saveCharacter', async (characterData) => {
         if (db && players[uid] && uid !== socket.id) {
             try {
-                // Path found in game.min.js: "users/" + userID
                 await db.ref(`users/${uid}`).update(characterData);
                 console.log(`[DB] Saved character for ${uid}`);
             } catch (err) {
