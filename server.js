@@ -73,8 +73,9 @@ io.on('connection', async (socket) => {
     const query = socket.handshake.query;
     
     // CRITICAL: Aligned with game.min.js 'onAuthStateChanged' logic
-    // The client expects 'user.uid' to map to 'this.game.prodigy.player.userID'
     const uid = query.userID || query.userToken || query.userId || query.uid || socket.id;
+    
+    // Some clients send zone name directly in worldId if they are in a specific area like Felspore
     const worldId = (query.worldId || '101').toString();
 
     // Default 'e' object initialization
@@ -87,7 +88,7 @@ io.on('connection', async (socket) => {
         y: 400,
         appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1 },
         equipmentdata: { weapon: 1, follow: null, data: { follow: null } },
-        data: { name: "New Wizard", level: 100 }
+        data: { name: "New Wizard", level: 100, zone: worldId }
     };
 
     // Hydration: Sync with 'users/' + userID path found in game.min.js
@@ -105,14 +106,17 @@ io.on('connection', async (socket) => {
         }
     }
 
-    console.log(`[JOIN] ${uid} joined World ${worldId}`);
+    console.log(`[JOIN] ${uid} joined room: ${worldId}`);
 
+    // Join the specific world/zone room
     socket.join(worldId);
     socket.join("GLOBAL_MONITOR");
 
+    // Send the player list for THIS world/zone
     const neighbors = Object.values(players).filter(p => p.world === worldId && p.id !== uid);
     socket.emit('playerList', neighbors);
 
+    // Broadcast join to others in the same world/zone
     socket.to(worldId).emit('playerJoined', players[uid]);
     io.to("GLOBAL_MONITOR").emit('playerJoined', players[uid]);
 
@@ -134,6 +138,35 @@ io.on('connection', async (socket) => {
 
             socket.to(players[uid].world).emit('player:moved', moveData);
             io.to("GLOBAL_MONITOR").emit('player:moved', moveData);
+        }
+    });
+
+    // Handle Zone Changes (e.g. going to Felspore)
+    // If the game client emits a zone change, we need to switch rooms
+    socket.on('player:zone', (newZone) => {
+        if (players[uid]) {
+            const oldZone = players[uid].world;
+            if (oldZone !== newZone) {
+                console.log(`[ZONE] ${uid} moving from ${oldZone} to ${newZone}`);
+                
+                // Tell old room I left
+                socket.to(oldZone).emit('playerLeft', uid);
+                socket.leave(oldZone);
+                
+                // Update player data
+                players[uid].world = newZone;
+                if (players[uid].data) players[uid].data.zone = newZone;
+                
+                // Join new room
+                socket.join(newZone);
+                
+                // Get new neighbors
+                const neighbors = Object.values(players).filter(p => p.world === newZone && p.id !== uid);
+                socket.emit('playerList', neighbors);
+                
+                // Tell new room I joined
+                socket.to(newZone).emit('playerJoined', players[uid]);
+            }
         }
     });
 
