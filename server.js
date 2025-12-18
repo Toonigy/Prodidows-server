@@ -29,7 +29,7 @@ try {
 
 // --- SERVER SETUP ---
 const PORT = 8080;
-// Provided Real IDs
+// Provided Real IDs for session persistence
 const REAL_ID_1 = 'aTcB1gt3Auay8nqx28YErrbk0lz2'; 
 const REAL_ID_2 = 'Ha8JLkWqKyWtA9SC9LbFnILJqHl2';
 
@@ -42,7 +42,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased limit for full backpack/house data
 app.use(express.static(path.join(__dirname, 'public')));
 
 const io = new Server(server, {
@@ -55,9 +55,9 @@ const io = new Server(server, {
 // --- GLOBAL GAME STATE ---
 const players = {}; 
 
-// --- PLAYER DATA HANDLER ---
-// This matches the schema requested by the client
-const getMockPlayerData = (uid) => ({
+// --- COMPREHENSIVE PLAYER DATA GENERATOR ---
+// Matches the exact structure expected by the Prodigy Game Engine
+const getFullPlayerDataSchema = (uid) => ({
     appearancedata: { hat: 1, hair: 1, eyes: 1, head: 1, body: 1, skinColor: 1, hairColor: 1 },
     equipmentdata: { weapon: 1, armor: 1, boots: 1, spellRelic: 1 },
     kenneldata: [],
@@ -72,22 +72,21 @@ const getMockPlayerData = (uid) => ({
     gameVersion: "1.0.0"
 });
 
-// --- BACKEND AUTHORITY ---
-const BACKEND = {
-    verifyUser: async (token) => {
-        if (!token || token === 'undefined' || token === 'null') {
-            return { uid: `guest_${Math.random().toString(36).substr(2, 9)}` };
-        }
-        return { uid: token };
-    }
-};
-
 // --- API ENDPOINTS ---
 
-app.post('/game-api/v1/auth/login', (req, res) => {
+app.post('/game-api/v1/auth/login', async (req, res) => {
+    const { token } = req.body;
+    // Map token to REAL_ID_1 if it looks like our test user
+    const uid = (token && token.length > 20) ? token : REAL_ID_1;
+    
     res.json({
         success: true,
-        data: { auth: REAL_ID_1, userId: REAL_ID_1, userID: REAL_ID_1 }
+        data: { 
+            auth: uid, 
+            userId: uid, 
+            userID: uid,
+            token: token || "mock_access_token"
+        }
     });
 });
 
@@ -98,28 +97,6 @@ app.get('/game-api/v1/worlds', (req, res) => {
     ]);
 });
 
-app.post('/matchmaking-api/begin', (req, res) => {
-    const playerInfo = req.body;
-    console.log(`[MATCHMAKER] Request from ${playerInfo.userID}`);
-
-    res.status(200).send({
-        success: true,
-        data: {
-            matchId: `m_${Date.now()}`,
-            opponent: {
-                userID: REAL_ID_2,
-                name: "Rival Wizard",
-                level: (playerInfo.data?.level || 100),
-                appearance: playerInfo.appearancedata || { hat: 20, hair: 5, eyes: 2 },
-                equipment: playerInfo.equipmentdata || { weapon: 150 },
-                isMember: true
-            },
-            server: "localhost:8080",
-            encryptionKey: "backend_handshake_secure"
-        }
-    });
-});
-
 // LOAD PLAYER DATA
 app.get('/game-api/v1/user/:userID/data', async (req, res) => {
     const userID = req.params.userID;
@@ -128,48 +105,47 @@ app.get('/game-api/v1/user/:userID/data', async (req, res) => {
         try {
             const snapshot = await get(ref(db, `users/${userID}`));
             if (snapshot.exists()) {
-                console.log(`[DB] Loaded data for ${userID}`);
                 return res.status(200).send({ success: true, data: snapshot.val() });
             }
         } catch (e) {
-            console.error("[DB ERROR] Load failed:", e.message);
+            console.error("[DB ERROR]", e.message);
         }
     }
     
-    // Fallback to mock data if not in DB
-    console.log(`[API] Providing mock data for ${userID}`);
     res.status(200).send({
         success: true,
-        data: getMockPlayerData(userID)
+        data: getFullPlayerDataSchema(userID)
     });
 });
 
-// SAVE PLAYER DATA (CLOUD SAVE)
+// CLOUD SAVE ENDPOINT (Critical for processUpdate logic)
 app.post('/game-api/v1/cloud/save', async (req, res) => {
     const characterData = req.body;
-    const userID = characterData.userID || REAL_ID_1;
+    // The engine usually passes userID in the data object or headers
+    const userID = characterData.userID || req.headers['x-user-id'] || REAL_ID_1;
 
     if (db && characterData) {
         try {
+            // Persist the full object including backpack, house, kennel, etc.
             await set(ref(db, `users/${userID}`), characterData);
-            console.log(`[DB] Saved data for ${userID}`);
-            return res.status(200).send({ success: true });
+            console.log(`[CLOUD SAVE] Success for ${userID}`);
+            
+            // Returning 'true' here satisfies the 'e' parameter in your processUpdate function
+            return res.status(200).send(true); 
         } catch (e) {
-            console.error("[DB ERROR] Save failed:", e.message);
-            return res.status(500).send({ success: false, error: e.message });
+            console.error("[CLOUD SAVE ERROR]", e.message);
+            return res.status(500).send(false);
         }
     }
-    res.status(200).send({ success: true, message: "Save simulated (no DB)" });
+    // Fallback success for local testing without Firebase
+    res.status(200).send(true);
 });
 
 // --- SOCKET.IO HANDLING ---
 
 io.on('connection', async (socket) => {
     let { worldId = '1', userToken, userId } = socket.handshake.query;
-    const identifier = userToken || userId;
-
-    const auth = await BACKEND.verifyUser(identifier);
-    const uid = auth.uid;
+    const uid = userToken || userId || REAL_ID_1;
 
     players[uid] = {
         id: uid,
@@ -183,7 +159,7 @@ io.on('connection', async (socket) => {
     };
 
     socket.join(players[uid].world);
-    console.log(`[NETWORK] User ${uid} connected to world ${players[uid].world}`);
+    console.log(`[NETWORK] ${uid} joined ${players[uid].world}`);
 
     const neighbors = Object.values(players).filter(p => p.world === players[uid].world && p.id !== uid);
     socket.emit('playerList', neighbors);
@@ -198,26 +174,20 @@ io.on('connection', async (socket) => {
         }
     });
 
+    // Handle wizard movement updates
     socket.on('player:move', (data) => {
         if (players[uid] && data) {
+            // Update internal server state for this player
             players[uid].x = data.x;
             players[uid].y = data.y;
-            socket.to(players[uid].world).emit('player:moved', { id: uid, x: data.x, y: data.y });
-        }
-    });
-
-    socket.on('switchZone', (newZone) => {
-        if (players[uid]) {
-            const oldWorld = players[uid].world;
-            socket.leave(oldWorld);
-            socket.to(oldWorld).emit('playerLeft', uid);
-
-            players[uid].world = newZone.toString();
-            socket.join(players[uid].world);
             
-            const newNeighbors = Object.values(players).filter(p => p.world === newZone.toString() && p.id !== uid);
-            socket.emit('playerList', newNeighbors);
-            socket.to(newZone.toString()).emit('playerJoined', players[uid]);
+            // Broadcast the new coordinates to all other wizards in the same world
+            // Including the ID so the client knows which wizard to move
+            socket.to(players[uid].world).emit('player:moved', { 
+                id: uid, 
+                x: data.x, 
+                y: data.y 
+            });
         }
     });
 
@@ -225,11 +195,10 @@ io.on('connection', async (socket) => {
         if (players[uid]) {
             socket.to(players[uid].world).emit('playerLeft', uid);
             delete players[uid];
-            console.log(`[NETWORK] User ${uid} disconnected`);
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server optimized for backend.min.js running on port ${PORT}`);
+    console.log(`Multiplayer server operational on port ${PORT}`);
 });
