@@ -11,9 +11,10 @@ const path = require('path');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin'); 
 const { initializeApp } = require('firebase-admin/app');
-const { getDatabase, ref, get, set } = require('firebase-admin/database');
+const { getDatabase } = require('firebase-admin/database');
 
 // --- FIREBASE ADMIN SDK INITIALIZATION ---
+// Updated to match your specific Firebase Project: pde13532
 let db;
 try {
     const serviceAccount = require('./service-account.json'); 
@@ -22,16 +23,15 @@ try {
         databaseURL: "https://pde13532-default-rtdb.firebaseio.com"
     });
     db = getDatabase(firebaseAdminApp);
-    console.log("[FIREBASE] Admin SDK initialized successfully.");
+    console.log("[FIREBASE] Admin SDK initialized for project: pde13532");
 } catch (e) {
     console.error("[FIREBASE ERROR] Could not initialize Admin SDK. Check service-account.json:", e.message);
 }
 
 // --- SERVER SETUP ---
 const PORT = 8080;
-// Provided Real IDs for session persistence
+// Default ID fallback (can be one of your Firebase UIDs)
 const REAL_ID_1 = 'aTcB1gt3Auay8nqx28YErrbk0lz2'; 
-const REAL_ID_2 = 'Ha8JLkWqKyWtA9SC9LbFnILJqHl2';
 
 const app = express();
 const server = http.createServer(app);
@@ -42,7 +42,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json({ limit: '50mb' })); // Increased limit for full backpack/house data
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const io = new Server(server, {
@@ -55,8 +55,6 @@ const io = new Server(server, {
 // --- GLOBAL GAME STATE ---
 const players = {}; 
 
-// --- COMPREHENSIVE PLAYER DATA GENERATOR ---
-// Matches the exact structure expected by the Prodigy Game Engine
 const getFullPlayerDataSchema = (uid) => ({
     appearancedata: { hat: 1, hair: 1, eyes: 1, head: 1, body: 1, skinColor: 1, hairColor: 1 },
     equipmentdata: { weapon: 1, armor: 1, boots: 1, spellRelic: 1 },
@@ -76,94 +74,134 @@ const getFullPlayerDataSchema = (uid) => ({
 
 app.post('/game-api/v1/auth/login', async (req, res) => {
     const { token } = req.body;
-    // Map token to REAL_ID_1 if it looks like our test user
-    const uid = (token && token.length > 20) ? token : REAL_ID_1;
+    // Logic to determine UID: Use token if provided, otherwise fallback to known ID
+    const uid = (token && token.length > 10) ? token : REAL_ID_1;
+    
+    console.log(`[API AUTH] Login request for UID: ${uid}`);
     
     res.json({
         success: true,
-        data: { 
-            auth: uid, 
-            userId: uid, 
-            userID: uid,
-            token: token || "mock_access_token"
-        }
+        data: { auth: uid, userId: uid, userID: uid, token: token || "mock_access_token" }
     });
 });
 
 app.get('/game-api/v1/worlds', (req, res) => {
+    // If you are seeing Waterscape/Fireplane, it's because the client 
+    // is defaulting to its internal list. Let's provide a more robust response.
+    const currentPop = Object.keys(players).length;
     res.status(200).send([
-        { id: "1", name: "Crystal", population: Object.keys(players).length, status: "online" },
-        { id: "2", name: "Nova", population: 0, status: "online" }
+        { 
+            id: 101, 
+            name: "Crystal", 
+            population: currentPop, 
+            maxPopulation: 200, 
+            status: "online",
+            host: "localhost", // Change to your actual server IP/Domain if hosting
+            port: PORT
+        },
+        { 
+            id: 102, 
+            name: "Nova", 
+            population: 0, 
+            maxPopulation: 200, 
+            status: "online",
+            host: "localhost",
+            port: PORT
+        }
     ]);
 });
 
-// LOAD PLAYER DATA
 app.get('/game-api/v1/user/:userID/data', async (req, res) => {
     const userID = req.params.userID;
-    
-    if (db) {
+    if (db && userID && userID !== "undefined") {
         try {
-            const snapshot = await get(ref(db, `users/${userID}`));
+            const snapshot = await db.ref(`users/${userID}`).get();
             if (snapshot.exists()) {
+                console.log(`[DB] Found data for ${userID}`);
                 return res.status(200).send({ success: true, data: snapshot.val() });
             }
-        } catch (e) {
-            console.error("[DB ERROR]", e.message);
-        }
+        } catch (e) { console.error("[DB ERROR]", e.message); }
     }
-    
-    res.status(200).send({
-        success: true,
-        data: getFullPlayerDataSchema(userID)
-    });
+    console.log(`[DB] No data for ${userID}, returning default schema.`);
+    res.status(200).send({ success: true, data: getFullPlayerDataSchema(userID) });
 });
 
-// CLOUD SAVE ENDPOINT (Critical for processUpdate logic)
 app.post('/game-api/v1/cloud/save', async (req, res) => {
     const characterData = req.body;
-    // The engine usually passes userID in the data object or headers
     const userID = characterData.userID || req.headers['x-user-id'] || REAL_ID_1;
-
-    if (db && characterData) {
+    if (db && characterData && userID !== "undefined") {
         try {
-            // Persist the full object including backpack, house, kennel, etc.
-            await set(ref(db, `users/${userID}`), characterData);
-            console.log(`[CLOUD SAVE] Success for ${userID}`);
-            
-            // Returning 'true' here satisfies the 'e' parameter in your processUpdate function
+            await db.ref(`users/${userID}`).set(characterData);
             return res.status(200).send(true); 
-        } catch (e) {
-            console.error("[CLOUD SAVE ERROR]", e.message);
-            return res.status(500).send(false);
-        }
+        } catch (e) { return res.status(500).send(false); }
     }
-    // Fallback success for local testing without Firebase
     res.status(200).send(true);
 });
 
 // --- SOCKET.IO HANDLING ---
 
 io.on('connection', async (socket) => {
-    let { worldId = '1', userToken, userId } = socket.handshake.query;
-    const uid = userToken || userId || REAL_ID_1;
+    const query = socket.handshake.query;
+    
+    // Exhaustive check for the UID from the pde13532 auth session
+    const uid = query.userToken || query.userId || query.userID || query.uid || socket.id;
 
+    console.log(`[AUTH CHECK] Connection from project pde13532. UID: ${uid}`);
+
+    // Initialize local player state
     players[uid] = {
         id: uid,
         socketId: socket.id,
-        world: worldId.toString(),
+        world: query.worldId ? query.worldId.toString() : '101',
         x: 400,
         y: 400,
-        appearance: {},
-        equipment: {},
+        appearance: { hat: 1, hair: 1, eyes: 1 },
+        equipment: { weapon: 1 },
         name: "Wizard"
     };
 
-    socket.join(players[uid].world);
-    console.log(`[NETWORK] ${uid} joined ${players[uid].world}`);
+    // Use Admin privileges to fetch the specific user record from pde13532 RTDB
+    if (db && uid !== socket.id && uid !== "undefined") {
+        const fetchData = async () => {
+            try {
+                const userSnapshot = await db.ref(`users/${uid}`).get();
+                if (userSnapshot.exists()) {
+                    const userData = userSnapshot.val();
+                    if (players[uid]) {
+                        players[uid].appearance = userData.appearancedata || players[uid].appearance;
+                        players[uid].equipment = userData.equipmentdata || players[uid].equipment;
+                        players[uid].name = userData.data?.name || players[uid].name;
+                        socket.to(players[uid].world).emit('player:updated', players[uid]);
+                        console.log(`[NETWORK] Successfully synced pde13532 DB for: ${uid}`);
+                    }
+                }
+            } catch (err) {
+                console.error("[SOCKET DB ERROR]", err.message);
+            }
+        };
+        fetchData();
+    }
 
+    socket.join(players[uid].world);
+    
     const neighbors = Object.values(players).filter(p => p.world === players[uid].world && p.id !== uid);
     socket.emit('playerList', neighbors);
     socket.to(players[uid].world).emit('playerJoined', players[uid]);
+
+    socket.on('network:message', (packet) => {
+        const targetId = packet.target;
+        if (targetId && players[targetId]) {
+            io.to(players[targetId].socketId).emit('network:message', {
+                sender: uid,
+                data: packet
+            });
+        } else {
+            socket.to(players[uid].world).emit('network:message', {
+                sender: uid,
+                data: packet
+            });
+        }
+    });
 
     socket.on('player:sync', (data) => {
         if (players[uid]) {
@@ -174,15 +212,10 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // Handle wizard movement updates
     socket.on('player:move', (data) => {
         if (players[uid] && data) {
-            // Update internal server state for this player
             players[uid].x = data.x;
             players[uid].y = data.y;
-            
-            // Broadcast the new coordinates to all other wizards in the same world
-            // Including the ID so the client knows which wizard to move
             socket.to(players[uid].world).emit('player:moved', { 
                 id: uid, 
                 x: data.x, 
@@ -191,14 +224,30 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('switchZone', (newWorldId) => {
+        if (players[uid]) {
+            const oldWorld = players[uid].world;
+            socket.leave(oldWorld);
+            socket.to(oldWorld).emit('playerLeft', uid);
+
+            players[uid].world = newWorldId.toString();
+            socket.join(players[uid].world);
+
+            const newNeighbors = Object.values(players).filter(p => p.world === players[uid].world && p.id !== uid);
+            socket.emit('playerList', newNeighbors);
+            socket.to(players[uid].world).emit('playerJoined', players[uid]);
+        }
+    });
+
     socket.on('disconnect', () => {
         if (players[uid]) {
             socket.to(players[uid].world).emit('playerLeft', uid);
             delete players[uid];
+            console.log(`[NETWORK] Disconnected from pde13532: ${uid}`);
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Multiplayer server operational on port ${PORT}`);
+    console.log(`Socket Server (pde13532) active on port ${PORT}`);
 });
