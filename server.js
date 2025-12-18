@@ -14,189 +14,222 @@ const { initializeApp } = require('firebase-admin/app');
 const { getDatabase, ref, get, set } = require('firebase-admin/database');
 
 // --- FIREBASE ADMIN SDK INITIALIZATION ---
-const serviceAccount = require('./service-account.json'); 
-
-const FIREBASE_CONFIG = {
-    databaseURL: "https://pde13532-default-rtdb.firebaseio.com"
-};
-
-const firebaseAdminApp = initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: FIREBASE_CONFIG.databaseURL 
-});
-
-const db = getDatabase(firebaseAdminApp);
+let db;
+try {
+    const serviceAccount = require('./service-account.json'); 
+    const firebaseAdminApp = initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: "https://pde13532-default-rtdb.firebaseio.com"
+    });
+    db = getDatabase(firebaseAdminApp);
+    console.log("[FIREBASE] Admin SDK initialized successfully.");
+} catch (e) {
+    console.error("[FIREBASE ERROR] Could not initialize Admin SDK. Check service-account.json:", e.message);
+}
 
 // --- SERVER SETUP ---
 const PORT = 8080;
-const MOCK_UID = 'firebase-mock-user-123456789'; 
+// Provided Real IDs
+const REAL_ID_1 = 'aTcB1gt3Auay8nqx28YErrbk0lz2'; 
+const REAL_ID_2 = 'Ha8JLkWqKyWtA9SC9LbFnILJqHl2';
+
 const app = express();
 const server = http.createServer(app);
+
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    next();
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 // --- GLOBAL GAME STATE ---
-// We now map Firebase UIDs to player data
 const players = {}; 
-const worldUsers = new Map(); 
 
-// --- MOCK AUTH SYSTEM ---
-const MOCK_AUTH_SYSTEM = {
-    verifyIdToken: async (token) => {
-        if (token && typeof token === 'string' && token.length > 0) {
-            // In a real app, this would verify the JWT. 
-            // For now, it returns the token itself as the UID.
-            return { uid: token };
+// --- PLAYER DATA HANDLER ---
+// This matches the schema requested by the client
+const getMockPlayerData = (uid) => ({
+    appearancedata: { hat: 1, hair: 1, eyes: 1, head: 1, body: 1, skinColor: 1, hairColor: 1 },
+    equipmentdata: { weapon: 1, armor: 1, boots: 1, spellRelic: 1 },
+    kenneldata: [],
+    data: { name: `Wizard_${uid.substring(0, 4)}`, level: 100, gold: 500, stars: 10 },
+    questdata: {},
+    statedata: {},
+    tutorialdata: { "complete": true },
+    backpackdata: [],
+    housedata: {},
+    achievementsdata: {},
+    metadata: { isMember: true },
+    gameVersion: "1.0.0"
+});
+
+// --- BACKEND AUTHORITY ---
+const BACKEND = {
+    verifyUser: async (token) => {
+        if (!token || token === 'undefined' || token === 'null') {
+            return { uid: `guest_${Math.random().toString(36).substr(2, 9)}` };
         }
-        throw new Error("Invalid or missing token.");
+        return { uid: token };
     }
 };
 
-async function authenticateRequest(req) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-    const userToken = authHeader.split(' ')[1];
-    try {
-        const decodedToken = await MOCK_AUTH_SYSTEM.verifyIdToken(userToken);
-        return decodedToken.uid;
-    } catch (e) {
-        return null;
-    }
-}
-
 // --- API ENDPOINTS ---
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 app.post('/game-api/v1/auth/login', (req, res) => {
     res.json({
         success: true,
-        data: { auth: MOCK_UID, userId: MOCK_UID }
+        data: { auth: REAL_ID_1, userId: REAL_ID_1, userID: REAL_ID_1 }
     });
 });
 
 app.get('/game-api/v1/worlds', (req, res) => {
-    const worldList = [1, 2, 3].map(id => ({
-        id: id,
-        name: `World ${id}`,
-        icon: "fire",
-        path: "/worlds/fireplane",
-        full: 10,
-        players: 10,
-        maxPlayers: 100
-    }));
-    res.status(200).send(worldList);
+    res.status(200).send([
+        { id: "1", name: "Crystal", population: Object.keys(players).length, status: "online" },
+        { id: "2", name: "Nova", population: 0, status: "online" }
+    ]);
 });
 
-app.get('/game-api/v1/user/:userID/data', async (req, res) => {
-    const userID = req.params.userID;
+app.post('/matchmaking-api/begin', (req, res) => {
+    const playerInfo = req.body;
+    console.log(`[MATCHMAKER] Request from ${playerInfo.userID}`);
+
     res.status(200).send({
         success: true,
         data: {
-            appearancedata: { hat: 10, hair: 3, eyes: 4, head: 1, body: 2 },
-            equipmentdata: { weapon: 50, armor: 60 },
-            data: { name: `Wizard_${userID.substring(0,4)}`, level: 50 }
+            matchId: `m_${Date.now()}`,
+            opponent: {
+                userID: REAL_ID_2,
+                name: "Rival Wizard",
+                level: (playerInfo.data?.level || 100),
+                appearance: playerInfo.appearancedata || { hat: 20, hair: 5, eyes: 2 },
+                equipment: playerInfo.equipmentdata || { weapon: 150 },
+                isMember: true
+            },
+            server: "localhost:8080",
+            encryptionKey: "backend_handshake_secure"
         }
     });
 });
 
-app.post('/game-api/v1/cloud/save', async (req, res) => {
-    const userID = await authenticateRequest(req);
-    if (!userID) return res.status(401).send({ success: false });
-
-    const savePath = `users/${userID}`;
-    const characterData = req.body;
-
-    if (Object.keys(characterData).length > 0) {
-        await set(ref(db, savePath), characterData);
-        return res.status(200).send({ success: true, data: characterData });
-    } else {
-        const snapshot = await get(ref(db, savePath));
-        return res.status(200).send({ 
-            success: true, 
-            data: snapshot.exists() ? snapshot.val() : { name: "New Wizard" } 
-        });
+// LOAD PLAYER DATA
+app.get('/game-api/v1/user/:userID/data', async (req, res) => {
+    const userID = req.params.userID;
+    
+    if (db) {
+        try {
+            const snapshot = await get(ref(db, `users/${userID}`));
+            if (snapshot.exists()) {
+                console.log(`[DB] Loaded data for ${userID}`);
+                return res.status(200).send({ success: true, data: snapshot.val() });
+            }
+        } catch (e) {
+            console.error("[DB ERROR] Load failed:", e.message);
+        }
     }
+    
+    // Fallback to mock data if not in DB
+    console.log(`[API] Providing mock data for ${userID}`);
+    res.status(200).send({
+        success: true,
+        data: getMockPlayerData(userID)
+    });
 });
 
-// --- SOCKET.IO ---
+// SAVE PLAYER DATA (CLOUD SAVE)
+app.post('/game-api/v1/cloud/save', async (req, res) => {
+    const characterData = req.body;
+    const userID = characterData.userID || REAL_ID_1;
+
+    if (db && characterData) {
+        try {
+            await set(ref(db, `users/${userID}`), characterData);
+            console.log(`[DB] Saved data for ${userID}`);
+            return res.status(200).send({ success: true });
+        } catch (e) {
+            console.error("[DB ERROR] Save failed:", e.message);
+            return res.status(500).send({ success: false, error: e.message });
+        }
+    }
+    res.status(200).send({ success: true, message: "Save simulated (no DB)" });
+});
+
+// --- SOCKET.IO HANDLING ---
 
 io.on('connection', async (socket) => {
-    let { worldId = '1', userToken } = socket.handshake.query;
+    let { worldId = '1', userToken, userId } = socket.handshake.query;
+    const identifier = userToken || userId;
 
-    if (!userToken) {
-        console.error("[SOCKET.IO ERROR] Connection attempt without userToken");
-        socket.emit('error', { message: 'Auth required' });
-        return socket.disconnect(true);
-    }
+    const auth = await BACKEND.verifyUser(identifier);
+    const uid = auth.uid;
 
-    // Attempt to "verify" the token to get the UID
-    let playerFirebaseId;
-    try {
-        const decoded = await MOCK_AUTH_SYSTEM.verifyIdToken(userToken);
-        playerFirebaseId = decoded.uid;
-    } catch (err) {
-        console.error("[SOCKET.IO ERROR] Token verification failed");
-        return socket.disconnect(true);
-    }
-
-    const socketId = socket.id;
-
-    // Store player by Firebase ID
-    players[playerFirebaseId] = { 
-        id: playerFirebaseId, // The Firebase UID
-        socketId: socketId,
-        world: worldId, 
-        x: 500, 
-        y: 500 
+    players[uid] = {
+        id: uid,
+        socketId: socket.id,
+        world: worldId.toString(),
+        x: 400,
+        y: 400,
+        appearance: {},
+        equipment: {},
+        name: "Wizard"
     };
-    
-    socket.join(worldId);
 
-    console.log(`[PLAYER JOINED] Firebase ID: ${playerFirebaseId} joined World: ${worldId}`);
+    socket.join(players[uid].world);
+    console.log(`[NETWORK] User ${uid} connected to world ${players[uid].world}`);
 
-    // Filter other players in the same world using their Firebase UIDs
-    const otherUIDs = Object.keys(players)
-        .filter(uid => players[uid].world === worldId && uid !== playerFirebaseId);
+    const neighbors = Object.values(players).filter(p => p.world === players[uid].world && p.id !== uid);
+    socket.emit('playerList', neighbors);
+    socket.to(players[uid].world).emit('playerJoined', players[uid]);
 
-    // Tell the current user about everyone else
-    socket.emit('playerList', otherUIDs);
-    
-    // Tell everyone else that this Firebase User has joined
-    // We send an object with the 'id' property to match client-side expectations
-    socket.to(worldId).emit('playerJoined', playerFirebaseId);
+    socket.on('player:sync', (data) => {
+        if (players[uid]) {
+            players[uid].appearance = data.appearance || players[uid].appearance;
+            players[uid].equipment = data.equipment || players[uid].equipment;
+            players[uid].name = data.name || players[uid].name;
+            socket.to(players[uid].world).emit('player:updated', players[uid]);
+        }
+    });
 
     socket.on('player:move', (data) => {
-        if (players[playerFirebaseId]) {
-            players[playerFirebaseId].x = data.x;
-            players[playerFirebaseId].y = data.y;
+        if (players[uid] && data) {
+            players[uid].x = data.x;
+            players[uid].y = data.y;
+            socket.to(players[uid].world).emit('player:moved', { id: uid, x: data.x, y: data.y });
+        }
+    });
+
+    socket.on('switchZone', (newZone) => {
+        if (players[uid]) {
+            const oldWorld = players[uid].world;
+            socket.leave(oldWorld);
+            socket.to(oldWorld).emit('playerLeft', uid);
+
+            players[uid].world = newZone.toString();
+            socket.join(players[uid].world);
             
-            // Broadcast movement using the Firebase ID as the identifier
-            socket.to(worldId).emit('player:moved', { 
-                id: playerFirebaseId, 
-                x: data.x, 
-                y: data.y 
-            });
+            const newNeighbors = Object.values(players).filter(p => p.world === newZone.toString() && p.id !== uid);
+            socket.emit('playerList', newNeighbors);
+            socket.to(newZone.toString()).emit('playerJoined', players[uid]);
         }
     });
 
     socket.on('disconnect', () => {
-        if (players[playerFirebaseId]) {
-            console.log(`[PLAYER LEFT] Firebase ID: ${playerFirebaseId}`);
-            // Notify others that the Firebase User has left
-            socket.to(worldId).emit('playerLeft', playerFirebaseId);
-            delete players[playerFirebaseId];
+        if (players[uid]) {
+            socket.to(players[uid].world).emit('playerLeft', uid);
+            delete players[uid];
+            console.log(`[NETWORK] User ${uid} disconnected`);
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server optimized for backend.min.js running on port ${PORT}`);
 });
