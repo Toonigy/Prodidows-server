@@ -79,6 +79,7 @@ io.on('connection', async (socket) => {
     const worldId = (query.worldId || '101').toString();
 
     // Default 'e' object initialization based on PIXI.game.prodigy.player structure
+    // Note: this.game.prodigy.player.appearance.data = save.appearancedata
     players[uid] = {
         id: uid,
         userID: uid, 
@@ -86,7 +87,7 @@ io.on('connection', async (socket) => {
         world: worldId,
         x: 400,
         y: 400,
-        // Matches the complex objects within PIXI.game.prodigy.player
+        // Aligned with: this.game.prodigy.player.appearance.data structure
         appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
         equipmentdata: { weapon: 1, armor: 1, boots: 1, follow: null },
         data: { 
@@ -174,6 +175,7 @@ io.on('connection', async (socket) => {
     socket.on('player:update', (data) => {
         if (players[uid]) {
             // Update server-side state with the full player data object
+            // Ensures appearance updates are stored correctly as appearancedata
             players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
             
             socket.to(players[uid].world).emit('player:updated', players[uid]);
