@@ -72,15 +72,15 @@ const players = {};
 io.on('connection', async (socket) => {
     const query = socket.handshake.query;
     
-    // CRITICAL FIX: Ensure we have a userID string. 
-    // Your minified code depends on e.userID being defined.
+    // CRITICAL: Aligned with game.min.js 'onAuthStateChanged' logic
+    // The client expects 'user.uid' to map to 'this.game.prodigy.player.userID'
     const uid = query.userID || query.userToken || query.userId || query.uid || socket.id;
     const worldId = (query.worldId || '101').toString();
 
-    // Initialize the 'e' object that addPlayer(e) expects
+    // Default 'e' object initialization
     players[uid] = {
         id: uid,
-        userID: uid, // Essential for: if (!Util.isDefined(this.playerList[e.userID]))
+        userID: uid, 
         socketId: socket.id,
         world: worldId,
         x: 400,
@@ -90,14 +90,15 @@ io.on('connection', async (socket) => {
         data: { name: "New Wizard", level: 100 }
     };
 
-    // Attempt to hydrate from Firebase if possible
+    // Hydration: Sync with 'users/' + userID path found in game.min.js
     if (db && uid !== socket.id) {
         try {
-            const userSnapshot = await db.ref(`users/${uid}`).get();
+            const userRef = db.ref(`users/${uid}`);
+            const userSnapshot = await userRef.get();
             if (userSnapshot.exists()) {
                 const userData = userSnapshot.val();
-                // Merge Firebase data but keep userID consistent
                 players[uid] = { ...players[uid], ...userData, userID: uid, id: uid };
+                console.log(`[DB] Restored session for ${uid}`);
             }
         } catch (err) {
             console.error("[DB FETCH ERROR]", err.message);
@@ -106,52 +107,55 @@ io.on('connection', async (socket) => {
 
     console.log(`[JOIN] ${uid} joined World ${worldId}`);
 
-    // Join the world room AND a global room for the dashboard
     socket.join(worldId);
     socket.join("GLOBAL_MONITOR");
 
-    // Send the current world's player list to the new user
     const neighbors = Object.values(players).filter(p => p.world === worldId && p.id !== uid);
     socket.emit('playerList', neighbors);
 
-    // Broadcast to the world room (for the game)
     socket.to(worldId).emit('playerJoined', players[uid]);
-    
-    // Broadcast to the monitor room (for the dev dashboard)
     io.to("GLOBAL_MONITOR").emit('playerJoined', players[uid]);
 
     // --- EVENT HANDLERS ---
 
-    // Movement updates based on game.min.js pattern
+    // Movement updates
     socket.on('player:move', (data) => {
         if (players[uid]) {
             players[uid].x = data.x;
             players[uid].y = data.y;
             
-            // The client expects 'player:moved' to update other wizards
-            // We include both 'id' and 'userID' to ensure compatibility with 
-            // any internal Util.isDefined checks in game.min.js
             const moveData = { 
                 id: uid, 
                 userID: uid,
                 x: data.x, 
                 y: data.y,
-                // Some versions of the engine expect a 'face' or 'direction'
                 face: data.face || 1 
             };
 
             socket.to(players[uid].world).emit('player:moved', moveData);
-            
-            // Update dashboard
             io.to("GLOBAL_MONITOR").emit('player:moved', moveData);
         }
     });
 
+    // Update event: Handles appearance/gear changes
     socket.on('player:update', (data) => {
         if (players[uid]) {
             players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
             socket.to(players[uid].world).emit('player:updated', players[uid]);
             io.to("GLOBAL_MONITOR").emit('player:updated', players[uid]);
+        }
+    });
+
+    // Save Character: Directly handles the 'saveCharacter()' logic from game.min.js
+    socket.on('player:saveCharacter', async (characterData) => {
+        if (db && players[uid] && uid !== socket.id) {
+            try {
+                // Path found in game.min.js: "users/" + userID
+                await db.ref(`users/${uid}`).update(characterData);
+                console.log(`[DB] Saved character for ${uid}`);
+            } catch (err) {
+                console.error("[DB SAVE ERROR]", err.message);
+            }
         }
     });
 
