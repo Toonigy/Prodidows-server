@@ -78,7 +78,7 @@ io.on('connection', async (socket) => {
     // Some clients send zone name directly in worldId if they are in a specific area like Felspore
     const worldId = (query.worldId || '101').toString();
 
-    // Default 'e' object initialization
+    // Default 'e' object initialization based on PIXI.game.prodigy.player structure
     players[uid] = {
         id: uid,
         userID: uid, 
@@ -86,9 +86,17 @@ io.on('connection', async (socket) => {
         world: worldId,
         x: 400,
         y: 400,
-        appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1 },
-        equipmentdata: { weapon: 1, follow: null, data: { follow: null } },
-        data: { name: "New Wizard", level: 100, zone: worldId }
+        // Matches the complex objects within PIXI.game.prodigy.player
+        appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
+        equipmentdata: { weapon: 1, armor: 1, boots: 1, follow: null },
+        data: { 
+            name: "New Wizard", 
+            level: 100, 
+            zone: worldId,
+            stars: 0,
+            gold: 0,
+            isMember: true 
+        }
     };
 
     // Hydration: Sync with 'users/' + userID path found in game.min.js
@@ -142,38 +150,32 @@ io.on('connection', async (socket) => {
     });
 
     // Handle Zone Changes (e.g. going to Felspore)
-    // If the game client emits a zone change, we need to switch rooms
     socket.on('player:zone', (newZone) => {
         if (players[uid]) {
             const oldZone = players[uid].world;
             if (oldZone !== newZone) {
                 console.log(`[ZONE] ${uid} moving from ${oldZone} to ${newZone}`);
                 
-                // Tell old room I left
                 socket.to(oldZone).emit('playerLeft', uid);
                 socket.leave(oldZone);
                 
-                // Update player data
                 players[uid].world = newZone;
                 if (players[uid].data) players[uid].data.zone = newZone;
                 
-                // Join new room
                 socket.join(newZone);
-                
-                // Get new neighbors
                 const neighbors = Object.values(players).filter(p => p.world === newZone && p.id !== uid);
                 socket.emit('playerList', neighbors);
-                
-                // Tell new room I joined
                 socket.to(newZone).emit('playerJoined', players[uid]);
             }
         }
     });
 
-    // Update event: Handles appearance/gear changes
+    // Update event: Handles data from PIXI.game.prodigy.player (equipment, appearance, etc.)
     socket.on('player:update', (data) => {
         if (players[uid]) {
+            // Update server-side state with the full player data object
             players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
+            
             socket.to(players[uid].world).emit('player:updated', players[uid]);
             io.to("GLOBAL_MONITOR").emit('player:updated', players[uid]);
         }
