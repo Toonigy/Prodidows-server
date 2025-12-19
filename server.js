@@ -1,37 +1,36 @@
 /**
- * CLIENT-SIDE REMINDER:
- * In your game bridge/client code, you MUST update the socket initialization:
- * FROM: const socket = io("http://localhost:8080", { ... });
- * TO:   const socket = io("https://prodidows-server.onrender.com", { ... });
+ * PRODUCTION CHECKLIST FOR RENDER:
+ * 1. You MUST update your client-side bridge code!
+ * Change: const socket = io("http://localhost:8080");
+ * To:     const socket = io("https://prodidows-server.onrender.com");
+ * * 2. Ensure your world selection screen uses the 'host' from the API response below.
  */
 
 const express = require('express');
-const http = require('http'); // Render handles HTTPS for us; we use HTTP internally
+const http = require('http'); // Render provides the SSL certificate, so we use http internally
 const path = require('path');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin'); 
 const { initializeApp } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
-// --- FIREBASE ADMIN SDK INITIALIZATION ---
+// --- FIREBASE ADMIN SDK ---
 let db;
 try {
-    // On Render, ensure this file is uploaded or use Environment Variables
     const serviceAccount = require('./service-account.json'); 
     const firebaseAdminApp = initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: "https://pde13532-default-rtdb.firebaseio.com"
     });
     db = getDatabase(firebaseAdminApp);
-    console.log("[FIREBASE] Admin SDK initialized for project: pde13532");
+    console.log("[FIREBASE] Admin SDK connected to pde13532");
 } catch (e) {
-    console.error("[FIREBASE ERROR] Could not initialize Admin SDK:", e.message);
+    console.error("[FIREBASE ERROR]:", e.message);
 }
 
 const app = express();
 const server = http.createServer(app);
-// Use Render's PORT environment variable or default to 8080
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080; // Render sets this automatically
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -40,15 +39,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// --- API ENDPOINTS ---
-
-/**
- * UPDATED: World List for Render Production
- * - fullness: 0.1 (Enables Green Bar)
- * - host: The Render URL (Points the client to the right secure websocket)
- */
+// --- WORLD LIST API ---
 const getWorlds = (req, res) => {
     const worldList = [
         { 
@@ -56,8 +48,8 @@ const getWorlds = (req, res) => {
             name: "Crystal", 
             population: "Low", 
             status: "online", 
-            fullness: 0.1,    
-            host: "prodidows-server.onrender.com" 
+            fullness: 0.1,    // Green bar
+            host: "prodidows-server.onrender.com" // Ensure this is HTTPS/WSS compatible
         },
         { 
             id: "102", 
@@ -74,77 +66,84 @@ const getWorlds = (req, res) => {
 app.get('/getWorldList', getWorlds);
 app.get('/game-api/v1/worlds', getWorlds);
 
+// --- CHARACTER API ---
 app.get('/game-api/v1/characters/:id', async (req, res) => {
     let targetId = req.params.id;
-    if (targetId === "[object Object]") return res.status(400).json({ error: "Invalid ID" });
-    if (!db) return res.status(503).json({ error: "DB Offline" });
+    if (targetId === "[object Object]") return res.status(400).json({ error: "Malformed ID" });
+    if (!db) return res.status(503).json({ error: "Database offline" });
 
     try {
-        const userRef = db.ref(`users/${targetId}`);
-        const snapshot = await userRef.get();
+        const snapshot = await db.ref(`users/${targetId}`).get();
         if (snapshot.exists()) {
             res.json(snapshot.val());
         } else {
+            // Default character for new users
             res.json({
                 userID: targetId,
                 appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
                 equipmentdata: { weapon: 1, armor: 1, boots: 1, follow: null },
-                data: { name: "New Wizard", level: 1, gold: 100, isMember: true }
+                data: { name: "Explorer", level: 1, gold: 100, isMember: true }
             });
         }
     } catch (err) {
-        res.status(500).json({ error: "Internal Error" });
+        res.status(500).json({ error: err.message });
     }
 });
 
+// --- SOCKET.IO ---
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    transports: ['websocket', 'polling'] // Allow both for better compatibility on Render
+    transports: ['websocket', 'polling'] // websocket is preferred for WSS
 });
 
 const players = {}; 
 
-io.on('connection', async (socket) => {
+io.on('connection', (socket) => {
     const query = socket.handshake.query;
-    const uid = query.userID || query.uid || socket.id;
+    // CRITICAL: Ensure we don't treat [object Object] as a real ID
+    const rawUid = query.userID || query.uid;
+    const uid = (rawUid && rawUid !== "[object Object]") ? rawUid : socket.id;
     const worldId = (query.worldId || '101').toString();
+
+    console.log(`[CONN] User ${uid} joined world ${worldId}`);
 
     players[uid] = {
         id: uid,
         userID: uid, 
         world: worldId,
-        x: 400,
-        y: 400,
-        data: { name: "New Wizard", level: 100, zone: worldId, isMember: true }
+        x: 400, y: 400,
+        name: "New Wizard"
     };
 
     socket.join(worldId);
     
+    // Send list of other players in the same world
     const neighbors = Object.values(players).filter(p => p.world === worldId && p.id !== uid);
     socket.emit('playerList', neighbors);
+    
+    // Tell others you arrived
     socket.to(worldId).emit('playerJoined', players[uid]);
 
     socket.on('player:move', (data) => {
         if (players[uid]) {
             players[uid].x = data.x;
             players[uid].y = data.y;
-            socket.to(players[uid].world).emit('player:moved', { id: uid, x: data.x, y: data.y, face: data.face || 1 });
+            socket.to(players[uid].world).emit('player:moved', { 
+                id: uid, x: data.x, y: data.y, face: data.face || 1 
+            });
         }
     });
 
     socket.on('disconnect', () => {
         if (players[uid]) {
+            console.log(`[DISCONN] User ${uid} left`);
             socket.to(players[uid].world).emit('playerLeft', uid);
             delete players[uid];
         }
     });
 });
 
-// Render provides the PORT env variable automatically
 server.listen(PORT, () => {
-    console.log(`Prodigy Production Server active on Port: ${PORT}`);
-    console.log(`Endpoint: https://prodidows-server.onrender.com/game-api/v1/worlds`);
+    console.log(`Server running on port ${PORT}`);
 });
