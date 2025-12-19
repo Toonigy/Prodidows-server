@@ -1,13 +1,18 @@
 /**
  * PRODUCTION CHECKLIST FOR RENDER:
- * 1. You MUST update your client-side bridge code!
+ * * 1. FIX THE WORLD LIST FETCH:
+ * In your client code, where you fetch the worlds (game-api/v1/worlds):
+ * WRONG: fetch("ws://prodidows-server.onrender.com/game-api/v1/worlds")
+ * RIGHT: fetch("https://prodidows-server.onrender.com/game-api/v1/worlds")
+ * * 2. FIX THE SOCKET CONNECTION:
  * Change: const socket = io("http://localhost:8080");
  * To:     const socket = io("https://prodidows-server.onrender.com");
- * * 2. Ensure your world selection screen uses the 'host' from the API response below.
+ * * 3. PUBLIC DATA:
+ * Ensure index.html is in the 'public' folder.
  */
 
 const express = require('express');
-const http = require('http'); // Render provides the SSL certificate, so we use http internally
+const http = require('http'); 
 const path = require('path');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin'); 
@@ -30,21 +35,27 @@ try {
 
 const app = express();
 const server = http.createServer(app);
-const PORT = process.env.PORT || 8080; // Render sets this automatically
+const PORT = process.env.PORT || 8080;
 
+// --- IMPROVED CORS FOR PRODUCTION ---
 app.use((req, res, next) => {
+    // Allow your specific frontend origin or "*"
     res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    
+    // Handle OPTIONS preflight
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
     next();
 });
 
 app.use(express.json({ limit: '50mb' }));
 
 // --- STATIC FILES ---
-// This serves index.html and other assets from the /public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Catch-all route to serve index.html for the root path
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -57,8 +68,8 @@ const getWorlds = (req, res) => {
             name: "Crystal", 
             population: "Low", 
             status: "online", 
-            fullness: 0.1,    // Green bar
-            host: "prodidows-server.onrender.com" // Ensure this is HTTPS/WSS compatible
+            fullness: 0.1,    
+            host: "prodidows-server.onrender.com" 
         },
         { 
             id: "102", 
@@ -86,7 +97,6 @@ app.get('/game-api/v1/characters/:id', async (req, res) => {
         if (snapshot.exists()) {
             res.json(snapshot.val());
         } else {
-            // Default character for new users
             res.json({
                 userID: targetId,
                 appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
@@ -101,16 +111,18 @@ app.get('/game-api/v1/characters/:id', async (req, res) => {
 
 // --- SOCKET.IO ---
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] },
+    cors: { 
+        origin: "*", 
+        methods: ["GET", "POST"] 
+    },
     allowEIO3: true,
-    transports: ['websocket', 'polling'] // websocket is preferred for WSS
+    transports: ['websocket', 'polling'] 
 });
 
 const players = {}; 
 
 io.on('connection', (socket) => {
     const query = socket.handshake.query;
-    // CRITICAL: Ensure we don't treat [object Object] as a real ID
     const rawUid = query.userID || query.uid;
     const uid = (rawUid && rawUid !== "[object Object]") ? rawUid : socket.id;
     const worldId = (query.worldId || '101').toString();
@@ -127,11 +139,8 @@ io.on('connection', (socket) => {
 
     socket.join(worldId);
     
-    // Send list of other players in the same world
     const neighbors = Object.values(players).filter(p => p.world === worldId && p.id !== uid);
     socket.emit('playerList', neighbors);
-    
-    // Tell others you arrived
     socket.to(worldId).emit('playerJoined', players[uid]);
 
     socket.on('player:move', (data) => {
