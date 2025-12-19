@@ -67,7 +67,7 @@ const generateWorldData = () => {
             population: counts["101"] > 0 ? (counts["101"] > 50 ? "High" : "Low") : "Empty", 
             status: "online", 
             fullness: counts["101"] / MAX_CAPACITY, 
-            host: "https://prodidows-server.onrender.com" 
+            host: "prodidows-server.onrender.com" 
         },
         { 
             id: "102", 
@@ -75,7 +75,7 @@ const generateWorldData = () => {
             population: counts["102"] > 0 ? (counts["102"] > 50 ? "High" : "Low") : "Empty", 
             status: "online", 
             fullness: counts["102"] / MAX_CAPACITY, 
-            host: "https://prodidows-server.onrender.com" 
+            host: "prodidows-server.onrender.com" 
         }
     ];
 };
@@ -219,3 +219,4 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
+
