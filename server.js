@@ -86,7 +86,8 @@ app.get('/game-api/v1/worlds', getWorlds);
 // --- CHARACTER API ---
 app.get('/game-api/v1/characters/:id', async (req, res) => {
     let targetId = req.params.id;
-    if (targetId === "[object Object]") return res.status(400).json({ error: "Malformed ID" });
+    // Basic validation to prevent saving [object Object] as a key
+    if (targetId === "[object Object]" || !targetId) return res.status(400).json({ error: "Malformed ID" });
     if (!db) return res.status(503).json({ error: "Database offline" });
 
     try {
@@ -94,6 +95,7 @@ app.get('/game-api/v1/characters/:id', async (req, res) => {
         if (snapshot.exists()) {
             res.json(snapshot.val());
         } else {
+            // Default character for new or anonymous users
             res.json({
                 userID: targetId,
                 appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
@@ -121,6 +123,9 @@ const players = {};
 io.on('connection', (socket) => {
     const query = socket.handshake.query;
     const rawUid = query.userID || query.uid;
+    
+    // logic: If we have a real-looking UID (not an object and not empty), use it.
+    // Otherwise, use the socket.id as a temporary guest ID.
     const uid = (rawUid && rawUid !== "[object Object]") ? rawUid : socket.id;
     const worldId = (query.worldId || '101').toString();
 
@@ -136,8 +141,11 @@ io.on('connection', (socket) => {
 
     socket.join(worldId);
     
+    // Send list of other players in the same world
     const neighbors = Object.values(players).filter(p => p.world === worldId && p.id !== uid);
     socket.emit('playerList', neighbors);
+    
+    // Notify others
     socket.to(worldId).emit('playerJoined', players[uid]);
 
     socket.on('player:move', (data) => {
@@ -147,6 +155,18 @@ io.on('connection', (socket) => {
             socket.to(players[uid].world).emit('player:moved', { 
                 id: uid, x: data.x, y: data.y, face: data.face || 1 
             });
+        }
+    });
+
+    // Optional: Save character data to Realtime Database if UID is not just the socket ID
+    socket.on('saveCharacter', async (characterData) => {
+        if (db && uid !== socket.id) {
+            try {
+                await db.ref(`users/${uid}`).update(characterData);
+                console.log(`[DB] Character saved for ${uid}`);
+            } catch (err) {
+                console.error("[DB ERROR]", err.message);
+            }
         }
     });
 
