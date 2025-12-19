@@ -1,3 +1,10 @@
+/**
+ * CLIENT-SIDE REMINDER:
+ * In your game bridge/client code, you MUST update the socket initialization:
+ * FROM: const socket = io("http://localhost:8080", { ... });
+ * TO:   const socket = io("https://prodidows-server.onrender.com", { ... });
+ */
+
 const express = require('express');
 const http = require('http'); // Render handles HTTPS for us; we use HTTP internally
 const path = require('path');
