@@ -40,6 +40,15 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '50mb' }));
 
+// --- STATIC FILES ---
+// This serves index.html and other assets from the /public folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Catch-all route to serve index.html for the root path
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // --- WORLD LIST API ---
 const getWorlds = (req, res) => {
     const worldList = [
