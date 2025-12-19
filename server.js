@@ -33,65 +33,37 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 8080;
 
-// --- CORS HANDLING ---
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-    
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
 
 app.use(express.json({ limit: '50mb' }));
-
-// --- STATIC FILES ---
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// --- WORLD LIST API (POINTING TO LOCALHOST) ---
+// --- WORLD LIST API ---
 const getWorlds = (req, res) => {
     const worldList = [
-        { 
-            id: "101", 
-            name: "Local Crystal", 
-            population: "Low", 
-            status: "online", 
-            fullness: 0.1,    
-            host: "localhost:8080" 
-        },
-        { 
-            id: "102", 
-            name: "Local Nova", 
-            population: "Low", 
-            status: "online",
-            fullness: 0.2,    
-            host: "localhost:8080" 
-        }
+        { id: "101", name: "Local Crystal", population: "Low", status: "online", fullness: 0.1, host: "localhost:8080" },
+        { id: "102", name: "Local Nova", population: "Low", status: "online", fullness: 0.2, host: "localhost:8080" }
     ];
     res.json(worldList);
 };
-
 app.get('/getWorldList', getWorlds);
 app.get('/game-api/v1/worlds', getWorlds);
 
 // --- CHARACTER API ---
 app.get('/game-api/v1/characters/:id', async (req, res) => {
     let targetId = req.params.id;
-
-    if (targetId === "[object Object]" || !targetId) {
-        targetId = req.query.userID || req.query.uid;
-    }
-
-    if (!targetId || targetId === "[object Object]") {
-        return res.status(400).json({ error: "Invalid User ID provided" });
-    }
-
+    if (targetId === "[object Object]" || !targetId) targetId = req.query.userID || req.query.uid;
+    if (!targetId || targetId === "[object Object]") return res.status(400).json({ error: "Invalid User ID" });
     if (!db) return res.status(503).json({ error: "Database offline" });
 
     try {
@@ -126,24 +98,25 @@ io.on('connection', (socket) => {
     const uid = (rawUid && rawUid !== "[object Object]") ? rawUid : socket.id;
     const worldId = (query.worldId || '101').toString();
 
-    // The current zone/map the player is in. Default to 'none' until joinZone is called.
     let currentZone = 'none';
 
+    // Create the player record with full metadata slots
     players[uid] = {
         id: uid,
         userID: uid, 
         world: worldId,
         zone: currentZone,
         x: 400, y: 400,
-        name: "New Wizard",
-        appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 }
+        face: 1,
+        name: query.name || "New Wizard",
+        isMember: query.isMember === 'true',
+        appearance: {}, 
+        equipment: {}
     };
 
-    console.log(`[CONN] User ${uid} connected to world ${worldId}`);
+    console.log(`[CONN] ${players[uid].name} (${uid}) connected`);
 
-    // Logic for joining a specific zone/map
     const joinZone = (zoneId) => {
-        // Leave previous zone room
         if (currentZone !== 'none') {
             socket.leave(`${worldId}:${currentZone}`);
             socket.to(`${worldId}:${currentZone}`).emit('playerLeft', uid);
@@ -152,48 +125,58 @@ io.on('connection', (socket) => {
         currentZone = zoneId;
         players[uid].zone = zoneId;
         
-        // Join the combined World+Zone room
         const roomName = `${worldId}:${currentZone}`;
         socket.join(roomName);
 
-        console.log(`[ZONE] User ${uid} joined zone: ${zoneId} in world ${worldId}`);
-
-        // Fetch neighbors ONLY in this specific zone
+        // Send existing neighbors in this zone to the new player
         const neighbors = Object.values(players).filter(p => 
-            p.world === worldId && 
-            p.zone === currentZone && 
-            p.id !== uid
+            p.world === worldId && p.zone === currentZone && p.id !== uid
         );
         
         socket.emit('playerList', neighbors);
+        // Broadcast arrival to neighbors
         socket.to(roomName).emit('playerJoined', players[uid]);
     };
 
-    // Support both 'joinZone' and 'switchZone' event names common in minified builds
     socket.on('joinZone', (data) => joinZone(data.zoneId || data));
     socket.on('switchZone', (data) => joinZone(data.zoneId || data));
 
+    // MOVEMENT: Now includes equipment/appearance updates to ensure consistency
     socket.on('player:move', (data) => {
         if (players[uid]) {
             players[uid].x = data.x;
             players[uid].y = data.y;
-            // Only broadcast to players in the same World + Zone
+            players[uid].face = data.face || 1;
+            
+            // Sync metadata if provided in movement packet
+            if (data.appearance) players[uid].appearance = data.appearance;
+            if (data.equipment) players[uid].equipment = data.equipment;
+            if (data.name) players[uid].name = data.name;
+
             socket.to(`${worldId}:${currentZone}`).emit('player:moved', { 
-                id: uid, x: data.x, y: data.y, face: data.face || 1 
+                id: uid, 
+                x: data.x, 
+                y: data.y, 
+                face: data.face || 1,
+                appearance: players[uid].appearance,
+                equipment: players[uid].equipment,
+                name: players[uid].name,
+                isMember: players[uid].isMember
             });
         }
     });
 
+    // FULL UPDATE: For when items are changed in inventory
     socket.on('player:update', (data) => {
         if (players[uid]) {
-            players[uid] = { ...players[uid], ...data, id: uid };
+            // Merge new data (equipment, appearance, etc.)
+            players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
             socket.to(`${worldId}:${currentZone}`).emit('player:updated', players[uid]);
         }
     });
 
     socket.on('disconnect', () => {
         if (players[uid]) {
-            console.log(`[DISCONN] User ${uid} left`);
             socket.to(`${worldId}:${currentZone}`).emit('playerLeft', uid);
             delete players[uid];
         }
