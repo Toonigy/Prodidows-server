@@ -48,14 +48,42 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// --- WORLD LIST API ---
+// In-memory player storage
+const players = {}; 
+
+// --- WORLD LIST API (DYNAMIC STATUS) ---
 const getWorlds = (req, res) => {
+    // Capacity for "Full" calculation (e.g., 100 players per world)
+    const MAX_CAPACITY = 100;
+
+    // Calculate how many players are in each world
+    const playerArray = Object.values(players);
+    const counts = {
+        "101": playerArray.filter(p => p.world === "101").length,
+        "102": playerArray.filter(p => p.world === "102").length
+    };
+
     const worldList = [
-        { id: "101", name: "Local Crystal", population: "Low", status: "online", fullness: 0.1, host: "localhost:8080" },
-        { id: "102", name: "Local Nova", population: "Low", status: "online", fullness: 0.2, host: "localhost:8080" }
+        { 
+            id: "101", 
+            name: "Local Crystal", 
+            population: counts["101"] > 0 ? (counts["101"] > 50 ? "High" : "Low") : "Empty", 
+            status: "online", 
+            fullness: counts["101"] / MAX_CAPACITY, 
+            host: "prodidows-server.onrender.com" 
+        },
+        { 
+            id: "102", 
+            name: "Local Nova", 
+            population: counts["102"] > 0 ? (counts["102"] > 50 ? "High" : "Low") : "Empty", 
+            status: "online", 
+            fullness: counts["102"] / MAX_CAPACITY, 
+            host: "prodidows-server.onrender.com" 
+        }
     ];
     res.json(worldList);
 };
+
 app.get('/getWorldList', getWorlds);
 app.get('/game-api/v1/worlds', getWorlds);
 
@@ -90,8 +118,6 @@ const io = new Server(server, {
     transports: ['websocket', 'polling'] 
 });
 
-const players = {}; 
-
 io.on('connection', (socket) => {
     const query = socket.handshake.query;
     let rawUid = query.userID || query.uid;
@@ -114,7 +140,7 @@ io.on('connection', (socket) => {
         equipment: {}
     };
 
-    console.log(`[CONN] ${players[uid].name} (${uid}) connected`);
+    console.log(`[CONN] ${players[uid].name} (${uid}) connected to world ${worldId}`);
 
     const joinZone = (zoneId) => {
         if (currentZone !== 'none') {
@@ -178,6 +204,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (players[uid]) {
             socket.to(`${worldId}:${currentZone}`).emit('playerLeft', uid);
+            console.log(`[DISCONN] ${players[uid].name} (${uid}) disconnected`);
             delete players[uid];
         }
     });
