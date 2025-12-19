@@ -1,6 +1,5 @@
 const express = require('express');
-const https = require('https'); // Changed from http to support WSS/HTTPS
-const fs = require('fs'); // Required to load your SSL certificates
+const http = require('http'); // Render handles HTTPS for us; we use HTTP internally
 const path = require('path');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin'); 
@@ -10,6 +9,7 @@ const { getDatabase } = require('firebase-admin/database');
 // --- FIREBASE ADMIN SDK INITIALIZATION ---
 let db;
 try {
+    // On Render, ensure this file is uploaded or use Environment Variables
     const serviceAccount = require('./service-account.json'); 
     const firebaseAdminApp = initializeApp({
         credential: admin.credential.cert(serviceAccount),
@@ -22,28 +22,9 @@ try {
 }
 
 const app = express();
-
-// --- SSL CONFIGURATION FOR WSS ---
-/**
- * To run a WSS server, you MUST have SSL certificates.
- * If you are running locally, you can use 'mkcert' or 'openssl' to generate these.
- * For production, use Let's Encrypt.
- */
-let server;
-try {
-    const options = {
-        key: fs.readFileSync(path.join(__dirname, 'certs', 'private.key')),
-        cert: fs.readFileSync(path.join(__dirname, 'certs', 'certificate.crt'))
-    };
-    server = https.createServer(options, app);
-    console.log("[SERVER] Starting in HTTPS/WSS mode.");
-} catch (err) {
-    console.warn("[WARN] SSL Certificates not found. Falling back to HTTP/WS.");
-    const http = require('http');
-    server = http.createServer(app);
-}
-
-const PORT = 8080;
+const server = http.createServer(app);
+// Use Render's PORT environment variable or default to 8080
+const PORT = process.env.PORT || 8080;
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -57,9 +38,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // --- API ENDPOINTS ---
 
 /**
- * UPDATED: World List with Fullness
- * 'fullness' is the key the engine usually checks for the green bar (0.0 to 1.0).
- * 'host' should be your domain name or IP that supports HTTPS.
+ * UPDATED: World List for Render Production
+ * - fullness: 0.1 (Enables Green Bar)
+ * - host: The Render URL (Points the client to the right secure websocket)
  */
 const getWorlds = (req, res) => {
     const worldList = [
@@ -68,8 +49,8 @@ const getWorlds = (req, res) => {
             name: "Crystal", 
             population: "Low", 
             status: "online", 
-            fullness: 0.1,    // 0.1 = 10% full (Green Bar)
-            host: "localhost" // Change this to your domain for WSS
+            fullness: 0.1,    
+            host: "prodidows-server.onrender.com" 
         },
         { 
             id: "102", 
@@ -77,7 +58,7 @@ const getWorlds = (req, res) => {
             population: "Low", 
             status: "online",
             fullness: 0.2,    
-            host: "localhost" 
+            host: "prodidows-server.onrender.com" 
         }
     ];
     res.json(worldList);
@@ -88,10 +69,8 @@ app.get('/game-api/v1/worlds', getWorlds);
 
 app.get('/game-api/v1/characters/:id', async (req, res) => {
     let targetId = req.params.id;
-    if (targetId === "[object Object]") {
-        return res.status(400).json({ error: "Invalid User ID format" });
-    }
-    if (!db) return res.status(503).json({ error: "Database not initialized" });
+    if (targetId === "[object Object]") return res.status(400).json({ error: "Invalid ID" });
+    if (!db) return res.status(503).json({ error: "DB Offline" });
 
     try {
         const userRef = db.ref(`users/${targetId}`);
@@ -107,17 +86,7 @@ app.get('/game-api/v1/characters/:id', async (req, res) => {
             });
         }
     } catch (err) {
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-app.get('/users/:id', async (req, res) => {
-    if (!db) return res.status(503).end();
-    try {
-        const snapshot = await db.ref(`users/${req.params.id}`).get();
-        res.json(snapshot.exists() ? snapshot.val() : {});
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: "Internal Error" });
     }
 });
 
@@ -125,7 +94,8 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     allowEIO3: true,
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'] // Allow both for better compatibility on Render
 });
 
 const players = {}; 
@@ -138,12 +108,9 @@ io.on('connection', async (socket) => {
     players[uid] = {
         id: uid,
         userID: uid, 
-        socketId: socket.id,
         world: worldId,
         x: 400,
         y: 400,
-        appearancedata: { hat: 1, hair: 1, eyes: 1, skinColor: 1, face: 1 },
-        equipmentdata: { weapon: 1, armor: 1, boots: 1, follow: null },
         data: { name: "New Wizard", level: 100, zone: worldId, isMember: true }
     };
 
@@ -157,7 +124,7 @@ io.on('connection', async (socket) => {
         if (players[uid]) {
             players[uid].x = data.x;
             players[uid].y = data.y;
-            socket.to(players[uid].world).emit('player:moved', { id: uid, userID: uid, x: data.x, y: data.y, face: data.face || 1 });
+            socket.to(players[uid].world).emit('player:moved', { id: uid, x: data.x, y: data.y, face: data.face || 1 });
         }
     });
 
@@ -169,7 +136,8 @@ io.on('connection', async (socket) => {
     });
 });
 
+// Render provides the PORT env variable automatically
 server.listen(PORT, () => {
-    const protocol = server instanceof https.Server ? 'https' : 'http';
-    console.log(`Prodigy Server active on ${protocol}://localhost:${PORT}`);
+    console.log(`Prodigy Production Server active on Port: ${PORT}`);
+    console.log(`Endpoint: https://prodidows-server.onrender.com/game-api/v1/worlds`);
 });
