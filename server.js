@@ -1,14 +1,12 @@
 /**
  * PRODUCTION CHECKLIST FOR RENDER:
  * * 1. FIX THE WORLD LIST FETCH:
- * In your client code, where you fetch the worlds (game-api/v1/worlds):
+ * In your client code (likely in public.min.js or your bridge), find the World List URL.
  * WRONG: fetch("ws://prodidows-server.onrender.com/game-api/v1/worlds")
  * RIGHT: fetch("https://prodidows-server.onrender.com/game-api/v1/worlds")
- * * 2. FIX THE SOCKET CONNECTION:
+ * * * 2. FIX THE SOCKET CONNECTION:
  * Change: const socket = io("http://localhost:8080");
  * To:     const socket = io("https://prodidows-server.onrender.com");
- * * 3. PUBLIC DATA:
- * Ensure index.html is in the 'public' folder.
  */
 
 const express = require('express');
@@ -39,12 +37,11 @@ const PORT = process.env.PORT || 8080;
 
 // --- IMPROVED CORS FOR PRODUCTION ---
 app.use((req, res, next) => {
-    // Allow your specific frontend origin or "*"
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
     
-    // Handle OPTIONS preflight
+    // Handle OPTIONS preflight requests
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
