@@ -51,26 +51,23 @@ app.get('/', (req, res) => {
 // In-memory player storage
 const players = {}; 
 
-// --- WORLD LIST API (DYNAMIC STATUS) ---
-const getWorlds = (req, res) => {
-    // Capacity for "Full" calculation (e.g., 100 players per world)
+// Helper function to generate dynamic world data
+const generateWorldData = () => {
     const MAX_CAPACITY = 100;
-
-    // Calculate how many players are in each world
     const playerArray = Object.values(players);
     const counts = {
         "101": playerArray.filter(p => p.world === "101").length,
         "102": playerArray.filter(p => p.world === "102").length
     };
 
-    const worldList = [
+    return [
         { 
             id: "101", 
             name: "Local Crystal", 
             population: counts["101"] > 0 ? (counts["101"] > 50 ? "High" : "Low") : "Empty", 
             status: "online", 
             fullness: counts["101"] / MAX_CAPACITY, 
-            host: "prodidows-server.onrender.com" 
+            host: "https://prodidows-server.onrender.com" 
         },
         { 
             id: "102", 
@@ -78,10 +75,14 @@ const getWorlds = (req, res) => {
             population: counts["102"] > 0 ? (counts["102"] > 50 ? "High" : "Low") : "Empty", 
             status: "online", 
             fullness: counts["102"] / MAX_CAPACITY, 
-            host: "prodidows-server.onrender.com" 
+            host: "https://prodidows-server.onrender.com" 
         }
     ];
-    res.json(worldList);
+};
+
+// --- WORLD LIST API (STILL AVAILABLE FOR INITIAL FETCH) ---
+const getWorlds = (req, res) => {
+    res.json(generateWorldData());
 };
 
 app.get('/getWorldList', getWorlds);
@@ -141,6 +142,11 @@ io.on('connection', (socket) => {
     };
 
     console.log(`[CONN] ${players[uid].name} (${uid}) connected to world ${worldId}`);
+
+    // WEBSOCKET WORLD LIST HANDLER
+    socket.on('getWorldList', () => {
+        socket.emit('worldList', generateWorldData());
+    });
 
     const joinZone = (zoneId) => {
         if (currentZone !== 'none') {
