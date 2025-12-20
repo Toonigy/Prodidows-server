@@ -1,14 +1,15 @@
 /**
  * DEVELOPMENT CHECKLIST FOR LOCALHOST:
- * * 1. WORLD LIST FETCH:
- * In your client code, ensure you are fetching from localhost.
- * RIGHT: fetch("http://localhost:8080/game-api/v1/worlds")
- * * 2. SOCKET CONNECTION:
- * RIGHT: const socket = io("http://localhost:8080");
+ * 1. WORLD LIST FETCH:
+ * Ensure the client is fetching from localhost:8080.
+ * 2. SOCKET CONNECTION:
+ * Ensure the socket connects to http://localhost:8080.
+ * 3. CHARACTER DATA:
+ * Character data is fetched via REST, while world stats are now dynamic via Socket/REST.
  */
 
 const express = require('express');
-const http = require('http'); 
+const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin'); 
@@ -24,7 +25,7 @@ try {
         databaseURL: "https://pde13532-default-rtdb.firebaseio.com"
     });
     db = getDatabase(firebaseAdminApp);
-    console.log("[FIREBASE] Admin SDK connected to pde13532");
+    console.log("[FIREBASE] Admin SDK connected");
 } catch (e) {
     console.error("[FIREBASE ERROR]:", e.message);
 }
@@ -44,58 +45,60 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 // In-memory player storage
 const players = {}; 
 
-// Helper function to generate dynamic world data
+/**
+ * GENERATE WORLD DATA
+ * Dynamically calculates population based on real-time connected players.
+ */
 const generateWorldData = () => {
-    const MAX_CAPACITY = 100;
+    const MAX_CAPACITY = 100; // Threshold for 100% fullness
     const playerArray = Object.values(players);
+    
+    // Count players per world ID
     const counts = {
         "101": playerArray.filter(p => p.world === "101").length,
         "102": playerArray.filter(p => p.world === "102").length
+    };
+
+    const getPopLabel = (count) => {
+        if (count === 0) return "Empty";
+        if (count < 10) return "Low";
+        if (count < 50) return "Medium";
+        return "High";
     };
 
     return [
         { 
             id: "101", 
             name: "Local Crystal", 
-            population: counts["101"] > 0 ? (counts["101"] > 50 ? "High" : "Low") : "Empty", 
+            population: getPopLabel(counts["101"]), 
             status: "online", 
-            fullness: counts["101"] / MAX_CAPACITY, 
-            host: "prodidows-server.onrender.com" 
+            full: Math.min(counts["101"] / MAX_CAPACITY, 1.0), 
+            host: "prodidows-server.onrender.com/" 
         },
         { 
             id: "102", 
             name: "Local Nova", 
-            population: counts["102"] > 0 ? (counts["102"] > 50 ? "High" : "Low") : "Empty", 
+            population: getPopLabel(counts["102"]), 
             status: "online", 
-            fullness: counts["102"] / MAX_CAPACITY, 
-            host: "prodidows-server.onrender.com" 
+            full: Math.min(counts["102"] / MAX_CAPACITY, 1.0), 
+            host: "prodidows-server.onrender.com/" 
         }
     ];
 };
 
-// --- WORLD LIST API (STILL AVAILABLE FOR INITIAL FETCH) ---
-const getWorlds = (req, res) => {
-    res.json(generateWorldData());
-};
+// --- HTTP ENDPOINTS ---
+app.get('/game-api/v1/worlds', (req, res) => res.json(generateWorldData()));
 
-app.get('/getWorldList', getWorlds);
-app.get('/game-api/v1/worlds', getWorlds);
-
-// --- CHARACTER API ---
 app.get('/game-api/v1/characters/:id', async (req, res) => {
     let targetId = req.params.id;
     if (targetId === "[object Object]" || !targetId) targetId = req.query.userID || req.query.uid;
     if (!targetId || targetId === "[object Object]") return res.status(400).json({ error: "Invalid User ID" });
-    if (!db) return res.status(503).json({ error: "Database offline" });
-
+    
     try {
+        if (!db) throw new Error("Database offline");
         const snapshot = await db.ref(`users/${targetId}`).get();
         if (snapshot.exists()) {
             res.json(snapshot.val());
@@ -127,7 +130,7 @@ io.on('connection', (socket) => {
 
     let currentZone = 'none';
 
-    // Create the player record with full metadata slots
+    // Store player immediately so population updates
     players[uid] = {
         id: uid,
         userID: uid, 
@@ -141,82 +144,63 @@ io.on('connection', (socket) => {
         equipment: {}
     };
 
-    console.log(`[CONN] ${players[uid].name} (${uid}) connected to world ${worldId}`);
+    console.log(`[CONN] ${players[uid].name} entered World ${worldId}. Current Population: ${Object.values(players).length}`);
 
     // WEBSOCKET WORLD LIST HANDLER
     socket.on('getWorldList', () => {
         socket.emit('worldList', generateWorldData());
     });
 
-    const joinZone = (zoneId) => {
+    socket.on('joinZone', (data) => {
+        const zoneId = data.zoneId || data;
         if (currentZone !== 'none') {
             socket.leave(`${worldId}:${currentZone}`);
             socket.to(`${worldId}:${currentZone}`).emit('playerLeft', uid);
         }
-
         currentZone = zoneId;
         players[uid].zone = zoneId;
-        
         const roomName = `${worldId}:${currentZone}`;
         socket.join(roomName);
 
-        // Send existing neighbors in this zone to the new player
         const neighbors = Object.values(players).filter(p => 
             p.world === worldId && p.zone === currentZone && p.id !== uid
         );
-        
         socket.emit('playerList', neighbors);
-        // Broadcast arrival to neighbors
         socket.to(roomName).emit('playerJoined', players[uid]);
-    };
+    });
 
-    socket.on('joinZone', (data) => joinZone(data.zoneId || data));
-    socket.on('switchZone', (data) => joinZone(data.zoneId || data));
-
-    // MOVEMENT: Now includes equipment/appearance updates to ensure consistency
     socket.on('player:move', (data) => {
         if (players[uid]) {
             players[uid].x = data.x;
             players[uid].y = data.y;
             players[uid].face = data.face || 1;
             
-            // Sync metadata if provided in movement packet
-            if (data.appearance) players[uid].appearance = data.appearance;
-            if (data.equipment) players[uid].equipment = data.equipment;
-            if (data.name) players[uid].name = data.name;
-
+            // Sync visuals to neighbors
             socket.to(`${worldId}:${currentZone}`).emit('player:moved', { 
-                id: uid, 
-                x: data.x, 
-                y: data.y, 
-                face: data.face || 1,
-                appearance: players[uid].appearance,
-                equipment: players[uid].equipment,
-                name: players[uid].name,
-                isMember: players[uid].isMember
+                id: uid, x: data.x, y: data.y, face: data.face,
+                appearance: data.appearance || players[uid].appearance,
+                equipment: data.equipment || players[uid].equipment,
+                name: players[uid].name
             });
         }
     });
 
-    // FULL UPDATE: For when items are changed in inventory
     socket.on('player:update', (data) => {
         if (players[uid]) {
-            // Merge new data (equipment, appearance, etc.)
-            players[uid] = { ...players[uid], ...data, id: uid, userID: uid };
+            players[uid] = { ...players[uid], ...data };
             socket.to(`${worldId}:${currentZone}`).emit('player:updated', players[uid]);
         }
     });
 
     socket.on('disconnect', () => {
         if (players[uid]) {
+            console.log(`[DISCONN] ${players[uid].name} left. Population: ${Object.values(players).length - 1}`);
             socket.to(`${worldId}:${currentZone}`).emit('playerLeft', uid);
-            console.log(`[DISCONN] ${players[uid].name} (${uid}) disconnected`);
             delete players[uid];
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server live on http://localhost:${PORT}`);
 });
-
