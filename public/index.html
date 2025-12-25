@@ -2,25 +2,28 @@
 <html>
 
 <head>
-    <title>Prodigy 1.37.0</title>
-    <meta charset="UTF-8" />
-    <meta name="description" content="The legendary math game Prodigy is now legendary again, and no longer a math game!"/>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <title>Prodigy Definitive Edition</title>
+        <meta charset="UTF-8" />
+<meta content='width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0' name='viewport' />
+    <meta name="description" content="Old Prodigy is back and better than ever! Click now and try an open source version of the definitive Old Prodigy experience!"/>
+    <script src="https://ao28th28thedev.github.io/Ao28th28thedev/js/jquery.min.js"></script>
     <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0' name='viewport' />
-    <link rel="icon" type="image/png" href="https://web.archive.org/web/20150910093225im_/https://www.prodigygame.com/Includes/Images/favicon.gif">
+    <link rel="icon" type="image/png" href="https://web.archive.org/web/20150912074628im_/https://www.prodigygame.com/Includes/Images/favicon.gif">
     <link rel="stylesheet" href="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/pde1500/edu/css/font-awesome.min.css">
-    <link rel="stylesheet" type="text/css" href="https://web.archive.org/web/20150910093225im_/https://www.prodigygame.com/assets/styles/main.css?v=1-17-0">
     <link href='https://fonts.googleapis.com/css?family=Lato:400,700,900,400italic' rel='stylesheet' type='text/css'>
     <link href='https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,300,400,500,600,700' rel='stylesheet' type='text/css'>
+	<script>
+
+</script>
     <style>
         html {
             height: 100%;
             overflow: hidden;
         }
         
-        body {
+        body {    
             margin: 0;
-            background-color: #55B9A7;
+            background-color: #627CDE;
             height: 100%;
             padding: 0 !important;
         }
@@ -134,7 +137,7 @@
         }
         
         #first-loading-screen {
-           background-image: url("./images/Login-Loader.png");
+            background-image: url("https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/pde1500/assets/images/Login-Loader.png");
 			background-attachment: fixed;
 			background-repeat: no-repeat;
 			background-size: cover;
@@ -154,6 +157,237 @@
             background-color: #FCF8E3;
             color: #8A6D3B;
         }
+
+            .ios-install-prompt {
+                background-color:#F2F2F2;
+                width:100%;
+                height:70px;
+                position:absolute;
+                z-index:10;
+                padding:5px 10px;
+            }
+
+            .ios-install-prompt__wrapper {
+                margin: 0 auto;
+                height:100%;
+                width:50%;
+            }
+
+            .ios-install-prompt__close {
+                display:block;
+                position:relative;
+                float:left;
+                height:100%;
+                top:35%;
+                color:#848484;
+                padding-right:20px;
+                cursor:pointer;
+            }
+
+            .ios-install-prompt__icon {
+                display:block;
+                float:left;
+                height:63px;
+                margin-right:5px;
+            }
+
+            .ios-install-prompt__data {
+                display:block;
+                float:left;
+                line-height:1.3;
+                margin-top:3px;
+            }
+
+            .ios-install-prompt__title {
+                color:#444;
+                display:block;
+                font-size:12px;
+                font-weight:bold;
+            }
+
+            .ios-install-prompt__label {
+                color:#5e5e5e;
+                display:block;
+                font-size:10px;
+            }
+
+            .ios-install-prompt__star {
+                color:#FF9300;
+            }
+
+            .ios-install-prompt__link {
+                display:block;
+                position:relative;
+                float:right;
+                height:100%;
+                top:30%;
+                color:#1481FE;
+                padding-right:5px;
+                cursor:pointer;
+            }
+
+            .login-progress-outline {
+                position:absolute;
+                background-color:#000000;
+                border-radius:4px;
+            }
+
+            .login-progress-container {
+                position:absolute;
+                background-color:#FFFFFF;
+                border-radius:4px;
+            }
+
+            .login-progress-bar {
+                position:absolute;
+                background-color:#1CE59D;
+                background-image: linear-gradient(#6DFE7A, #0AC3A2);
+                border-radius:4px;
+                -webkit-transition: width 1.25s cubic-bezier(.23,1,.32,1);
+                -moz-transition: width 1.25s cubic-bezier(.23,1,.32,1);
+                transition: width 1.25s cubic-bezier(.23,1,.32,1);
+            }
+
+            %game-menu {
+                z-index: 3;
+                position: fixed;
+                left: 10%;
+                width: 80%;
+                top: 10%;
+                height: 80%;
+                padding: 5% 5% 0 5%;
+                background-color:white;
+                border-radius:15px;
+            }
+
+            .game-menu--hex {
+                @extend %game-menu;
+
+                background: no-repeat right url("../images/game/hex/splash.jpg");
+                background-size: 100%;
+            }
+
+            .game-menu__close {
+                position:absolute;
+                top:0;
+                right:0;
+                top: -25px;
+                right: -25px;
+                height: 50px;
+                width: 50px;
+            }
+
+            .unlock-menu__form-container {
+                width:100%;
+
+                @include media($medium) {
+                    width: 55%;
+                }
+            }
+
+            .unlock-menu__title {
+                margin: 5px 0px 15px;
+                font-weight: 900;
+                color: #dbbe95;
+                // text-shadow: #b39b79;
+            }
+
+            %game-menu__container {
+                background-color:rgba(255,255,255,0.9);
+                padding: 10px;
+                border-radius:15px;
+            }
+
+            .unlock-menu__wrapper {
+                height:100%;
+                overflow-y:auto;
+            }
+
+            .game-menu__container {
+                @extend %game-menu__container;
+            }
+
+            .game-menu__container--unlock {
+                @extend %game-menu__container;
+                @extend %game-border;
+
+                margin:10px 10px 25px 10px;
+            }
+
+            %game-border {
+                box-shadow: 0 0 0 1px #595959, 0 0 0 5px #f6d6ab, 0 0 0 8px #d2aa71;
+            }
+
+            .game-border {
+                @extend %game-border;
+            }
+
+            #game-loading-container {
+                position:absolute;
+                width:100%;
+                height:100%;
+                z-index:0;
+                background-color:#627CDE;
+            }
+
+            .game-loading {
+                width:80%;
+                height:100%;
+            }
+
+            .game-loading__ed {
+                display: block;
+                height: 150px;
+                margin-bottom: 22px;
+            }
+
+            .game-loading__font {
+                color: #fff;
+                text-align: center;
+                margin-top: 22 !important;
+            }
+
+            .ed-progress-outline {
+                height: 24px;
+                width: 100%;
+                background-color:#000000;
+                border-radius:4px;
+                display: flex;
+                align-items: center;
+                padding: 0px 1px;
+            }
+
+            .ed-progress-container {
+                height: 22px;
+                width: 100%;
+                background-color:#FFFFFF;
+                border-radius:4px;
+            }
+
+            .ed-progress-bar {
+                height: 22px;
+                width: 0%;
+                background-color:#1CE59D;
+                background-image: linear-gradient(#6DFE7A, #0AC3A2);
+                border-radius:4px;
+                -webkit-transition: width 1.25s cubic-bezier(.23,1,.32,1);
+                -moz-transition: width 1.25s cubic-bezier(.23,1,.32,1);
+                transition: width 1.25s cubic-bezier(.23,1,.32,1);
+            }
+
+            <!-- TODO: inherit from body (from main.css)
+                -webkit-font-smoothing: antialiased;
+                background-color: #fff;
+                color: #555;
+                font-family: "Open Sans",sans-serif;
+                font-size: 1em;
+                line-height: 1.5;
+            -->
+
+            .game-announcement {
+                position:absolute;
+                z-index:10;
+            }
     </style>
 </head>
 <script id="advanced-modal-base-template" type="text/x-handlebars-template">
@@ -330,15 +564,15 @@
 		
 		// Your web app's Firebase configuration
 		// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyBWVP1pba2QK8YU59Ot6Jx7BWLI3FD3c4c",
-  authDomain: "pde13532.firebaseapp.com",
-  databaseURL: "https://pde13532-default-rtdb.firebaseio.com",
-  projectId: "pde13532",
-  storageBucket: "pde13532.firebasestorage.app",
-  messagingSenderId: "1091179956834",
-  appId: "1:1091179956834:web:8e3289d3ca0a61fe829f3b",
-  measurementId: "G-KBF4METH5J"
+		const firebaseConfig = {
+		  apiKey: "AIzaSyCLTCdWLmOfE_QrR13Z15VjRn2gTh4BvPo",
+		  authDomain: "triple-bird-410810.firebaseapp.com",
+		  databaseURL: "https://triple-bird-410810-default-rtdb.firebaseio.com",
+		  projectId: "triple-bird-410810",
+		  storageBucket: "triple-bird-410810.appspot.com",
+		  messagingSenderId: "220442635630",
+		  appId: "1:220442635630:web:87ea71a698d7195c3d657f",
+		  measurementId: "G-3LYT0H9SXG"
 		};
 
 		// Initialize Firebase
@@ -365,23 +599,27 @@ const firebaseConfig = {
 	</script>
 	
 	<!-- Other game scripts -->
-    <script src='./lib/socket.io.min.js'></script>
-     <script src="https://cdn.prodigygame.com/assets/scripts/app/build/public.min.js"></script>
+    <script src="https://cdn.prodigygame.com/assets/scripts/app/build/public.min.js"></script>
+    <script src="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/1-50-0/js/lodash.min.js"></script>
     <script src="https://ao28th28thedev.github.io/prodigy-classic/game-helpers.min.js"></script>
-    <script src="https://ao28th28thedev.github.io/prodigy-classic/game.js"></script>
-    <script src='https://cdn.prodigygame.com/education/skills/prod/b47b674f96/curricula.json'></script>
-    <script src="https://cdn.prodigygame.com/education/skills/prod/b47b674f96/skillTrees.json"></script>
+    <script src="https://ao28th28thedev.github.io/prodigy-classic/phaser.min.js"></script>
+    <script src='./lib/socket.io.min.js'></script>
     <script src="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/pde1500/edu/controls/js/controls.min.js"></script>
     <script src="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/pde1500/edu/question-interface/js/question.min.js"></script>
-    <script src="./js/phaser.min.js"></script>
-    <script src="./js/game.min.js"></script>
-    <script src="./js/easystar-0.4.4.min.js"></script>
-    <script src="./js/phaser-spine.min.js"></script>
+    <script src="https://ao28th28thedev.github.io/prodigy-classic/game.js"></script>
+    <script src='https://cdn.prodigygame.com/education/skills/prod/b47b674f96/curricula.json'></script>
+    <script src="https://code.prodigygame.com/lib/particle-storm.min.js"></script>
+    <script src="https://cdn.prodigygame.com/education/skills/prod/b47b674f96/skillTrees.json"></script>
+    <script src="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/1-50-0/js/phaser-spine.min.js"></script>
+    <script src="https://ao28th28thedev.github.io/Ao28th28thedev/oldprodigy/1-50-0/js/easystar-0.4.4.min.js"></script>
+    <script src="https://ao28th28thedev.github.io/prodigy-classic/easystar-0.2.0.min.js"></script>
     <script src="./js/mod-handler.js"></script>
+    <script src="./js/game.min.js"></script>
+    <script src="./lib/webfontloader.js"></script>
     <script type="text/javascript">
         var prodigyWeb = {};
         prodigyWeb.country = undefined;
-        prodigyWeb.gameVersion = '1-37-0';
+        prodigyWeb.gameVersion = '1-50-0';
 
         window.onload = function() {
             document.addEventListener("contextmenu", function(e) {
@@ -443,11 +681,6 @@ const firebaseConfig = {
                 classCodeModal.callback = callback;
                 classCodeModal.render();
             }
-        };
-
         }
     </script>
-
-</body>
-
 </html>
