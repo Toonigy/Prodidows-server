@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Prodigy Multiplayer Tester - Fixed</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f4f8; color: #333; }
+        .box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; max-width: 500px; }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.9em; }
+        input, select { padding: 10px; margin-top: 5px; width: 100%; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .btn { background: #007bff; color: white; border: none; padding: 12px; cursor: pointer; border-radius: 6px; width: 100%; margin-top: 20px; font-weight: bold; }
+        .btn-red { background: #dc3545; }
+        #log { background: #1e1e1e; color: #00ff00; padding: 15px; height: 150px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <h1>Multiplayer Tester</h1>
+    <div id="login-area" class="box">
+        <h3>Account & World Setup</h3>
+        <label>Server URL</label>
+        <input type="text" id="server" value="http://localhost:8080">
+        <label>Username</label>
+        <input type="text" id="username" value="Tester_Wizard">
+        <label>Manual Account ID (User ID)</label>
+        <input type="text" id="userid" placeholder="e.g., 52425" value="TEST_USER_1">
+        <label>Zone Name</label>
+        <input type="text" id="zone" placeholder="e.g., zone-dino" value="zone-dino">
+        <label>World Selection</label>
+        <select id="world">
+            <option value="1">1 (Farflight)</option>
+            <option value="2">2 (Pirate Bay)</option>
+        </select>
+        <button id="connect" class="btn">Connect with Zone Info</button>
+    </div>
+    <div id="connected-area" class="box" style="display:none;">
+        <h3 style="color: #28a745;">Connected Successfully</h3>
+        <p><strong>ID:</strong> <span id="display_id">---</span> | <strong>Zone:</strong> <span id="display_zone">---</span></p>
+        <button id="logout" class="btn btn-red">Disconnect Player</button>
+    </div>
+    <div class="box" style="max-width: 800px;">
+        <h3>Live Server Logs</h3>
+        <div id="log"></div>
+    </div>
+    <script>
+        var socket;
+        function addLog(msg) {
+            $('#log').append('<div>[' + new Date().toLocaleTimeString() + '] ' + msg + '</div>');
+            $('#log').scrollTop($('#log')[0].scrollHeight);
+        }
+        $('#connect').click(function() {
+            var serverUrl = $('#server').val();
+            var worldId = $('#world').val();
+            var name = $('#username').val();
+            var uid = $('#userid').val();
+            var zone = $('#zone').val();
+            addLog("Connecting to " + serverUrl + "...");
+            socket = io(serverUrl, {
+                query: { username: name, userId: uid, worldId: worldId, zone: zone },
+                transports: ['websocket']
+            });
+            socket.on('connect', function() {
+                addLog("Success! Connected to world " + worldId);
+                $('#display_id').text(uid);
+                $('#display_zone').text(zone);
+                $('#login-area').hide();
+                $('#connected-area').show();
+                socket.emit('join:world', { worldId: worldId });
+            });
+            socket.on('playerList', function(players) {
+                addLog("Received Player List. Total players in world: " + players.length);
+            });
+            socket.on('world:update', function(worlds) {
+                var current = worlds.find(w => w.id == worldId);
+                if(current) addLog("World population: " + current.full);
+            });
+            socket.on('disconnect', function() {
+                addLog("Disconnected.");
+                $('#login-area').show();
+                $('#connected-area').hide();
+            });
+        });
+        $('#logout').click(function() { if(socket) socket.disconnect(); });
+    </script>
+</body>
+</html>
