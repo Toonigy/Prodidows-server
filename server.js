@@ -11,15 +11,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- PRODIGY ENGINE COMPATIBILITY ROUTES ---
-
-// Fixes the 404 for /game-event
-app.post(['/game-event', '/v1/game-event'], (req, res) => {
-    // The game just wants a 200 OK or 204 No Content
-    res.sendStatus(200);
+const io = new Server(server, { 
+    cors: { origin: "*" },
+    allowEIO3: true,
+    transports: ['websocket', 'polling'] 
 });
 
-// World List API
+const players = {};
 const worlds = [
     { id: 1, name: "Farflight", full: 0, maxPopulation: 100, status: "online" },
     { id: 2, name: "Pirate Bay", full: 0, maxPopulation: 100, status: "online" }
@@ -29,32 +27,23 @@ app.get(['/game-api/v1/worlds', '/v1/worlds'], (req, res) => {
     res.json(worlds);
 });
 
-// Optional: Mocking user session for the engine
-app.get('/game-api/v1/user/:userId', (req, res) => {
-    res.json({ success: true, data: { userID: req.params.userId, name: "Wizard" } });
-});
-
-// --- SOCKET.IO LOGIC ---
-
-const io = new Server(server, { 
-    cors: { origin: "*" },
-    allowEIO3: true,
-    transports: ['websocket', 'polling'] 
-});
-
-const players = {};
+// Dummy route for telemetry to prevent the 404 block
+app.post(['/game-event', '/v1/game-event'], (req, res) => res.sendStatus(200));
 
 io.on('connection', (socket) => {
-    const uid = socket.handshake.query.userId || "Guest_" + socket.id;
+    // We capture the real userID from the query or a default
+    const userID = socket.handshake.query.userId || "0"; 
     const name = socket.handshake.query.username || "Wizard";
 
     players[socket.id] = { 
         id: socket.id, 
-        uid: uid, 
+        userID: userID, 
         name: name,
         world: null,
+        mapId: null, // The specific room/area
         x: 0, 
-        y: 0 
+        y: 0,
+        appearance: {}
     };
 
     socket.on('joinWorld', (rawData) => {
@@ -68,18 +57,51 @@ io.on('connection', (socket) => {
             const currentWorld = worlds.find(w => w.id === worldId);
             if (currentWorld) currentWorld.full++;
 
-            // Send existing players to the new user
+            // Send full player data including userID to the client
             const worldPlayers = Object.values(players)
-                .filter(p => p.world === worldId && p.id !== socket.id);
+                .filter(p => p.world === worldId && p.id !== socket.id)
+                .map(p => ({ 
+                    id: p.id, 
+                    userID: p.userID, 
+                    name: p.name, 
+                    x: p.x, 
+                    y: p.y,
+                    mapId: p.mapId 
+                }));
 
             socket.emit('playerList', worldPlayers);
             
-            // Broadcast new player to others
-            socket.to(`world_${worldId}`).emit('playerJoined', players[socket.id]);
+            // CRITICAL: Must send userID here for the 'Green Bar' to work
+            socket.to(`world_${worldId}`).emit('playerJoined', { 
+                id: socket.id, 
+                userID: userID, 
+                name: name 
+            });
+
             socket.emit('join:success', worldId);
-            
-            console.log(`[NETWORK] ${name} (${uid}) synced to World ${worldId}`);
+            console.log(`[NETWORK] ${name} (${userID}) joined world ${worldId}`);
         } catch (e) { console.error("Join Error:", e); }
+    });
+
+    // Handle map changes and movement
+    socket.on('updatePlayer', (data) => {
+        const p = players[socket.id];
+        if (p && p.world) {
+            p.x = data.x || p.x;
+            p.y = data.y || p.y;
+            p.mapId = data.mapId || p.mapId;
+            p.appearance = data.appearance || p.appearance;
+
+            // Only broadcast to people in the SAME WORLD
+            socket.to(`world_${p.world}`).emit('playerUpdate', {
+                id: socket.id,
+                userID: p.userID,
+                x: p.x,
+                y: p.y,
+                mapId: p.mapId,
+                appearance: p.appearance
+            });
+        }
     });
 
     socket.on('disconnect', () => {
@@ -93,5 +115,4 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => console.log(`Definitive Server active on port ${PORT}`));
+server.listen(3000, () => console.log('Server running on :3000'));
