@@ -1,6 +1,5 @@
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
@@ -9,110 +8,67 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-const io = new Server(server, { 
-    cors: { origin: "*" },
-    allowEIO3: true,
-    transports: ['websocket', 'polling'] 
-});
+const io = new Server(server, { cors: { origin: "*" }, allowEIO3: true });
 
 const players = {};
-const worlds = [
-    { id: 1, name: "Farflight", full: 0, maxPopulation: 100, status: "online" },
-    { id: 2, name: "Pirate Bay", full: 0, maxPopulation: 100, status: "online" }
-];
 
-app.get(['/game-api/v1/worlds', '/v1/worlds'], (req, res) => {
-    res.json(worlds);
-});
-
-// Dummy route for telemetry to prevent the 404 block
+// Handle Game Event 404s
 app.post(['/game-event', '/v1/game-event'], (req, res) => res.sendStatus(200));
 
 io.on('connection', (socket) => {
-    // We capture the real userID from the query or a default
-    const userID = socket.handshake.query.userId || "0"; 
+    // Definitive Edition usually passes these in the handshake
+    const userID = socket.handshake.query.userId || "0";
     const name = socket.handshake.query.username || "Wizard";
 
     players[socket.id] = { 
         id: socket.id, 
         userID: userID, 
         name: name,
-        world: null,
-        mapId: null, // The specific room/area
-        x: 0, 
-        y: 0,
-        appearance: {}
+        worldId: null,
+        mapId: 81, // Default map (e.g. Lamplight)
+        x: 500,
+        y: 500,
+        appearance: {} 
     };
 
-    socket.on('joinWorld', (rawData) => {
-        try {
-            const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-            const worldId = parseInt(data.worldId);
+    socket.on('joinWorld', (data) => {
+        const worldId = data.worldId;
+        players[socket.id].worldId = worldId;
+        socket.join(`world_${worldId}`);
 
-            players[socket.id].world = worldId;
-            socket.join(`world_${worldId}`);
+        // 1. Get everyone else in this world
+        const currentPlayersInWorld = Object.values(players)
+            .filter(p => p.worldId === worldId && p.id !== socket.id);
 
-            const currentWorld = worlds.find(w => w.id === worldId);
-            if (currentWorld) currentWorld.full++;
+        // 2. CRITICAL: Send playerList so the newcomer sees existing players
+        socket.emit('playerList', currentPlayersInWorld);
 
-            // Send full player data including userID to the client
-            const worldPlayers = Object.values(players)
-                .filter(p => p.world === worldId && p.id !== socket.id)
-                .map(p => ({ 
-                    id: p.id, 
-                    userID: p.userID, 
-                    name: p.name, 
-                    x: p.x, 
-                    y: p.y,
-                    mapId: p.mapId 
-                }));
+        // 3. CRITICAL: Notify existing players so they see the newcomer (The Green Bar trigger)
+        socket.to(`world_${worldId}`).emit('playerJoined', players[socket.id]);
 
-            socket.emit('playerList', worldPlayers);
-            
-            // CRITICAL: Must send userID here for the 'Green Bar' to work
-            socket.to(`world_${worldId}`).emit('playerJoined', { 
-                id: socket.id, 
-                userID: userID, 
-                name: name 
-            });
-
-            socket.emit('join:success', worldId);
-            console.log(`[NETWORK] ${name} (${userID}) joined world ${worldId}`);
-        } catch (e) { console.error("Join Error:", e); }
+        socket.emit('join:success', worldId);
+        console.log(`[SYNC] ${name} (${userID}) is now visible in World ${worldId}`);
     });
 
-    // Handle map changes and movement
+    // This is what keeps the "Green Bar" alive and moves the character
     socket.on('updatePlayer', (data) => {
         const p = players[socket.id];
-        if (p && p.world) {
-            p.x = data.x || p.x;
-            p.y = data.y || p.y;
-            p.mapId = data.mapId || p.mapId;
-            p.appearance = data.appearance || p.appearance;
-
-            // Only broadcast to people in the SAME WORLD
-            socket.to(`world_${p.world}`).emit('playerUpdate', {
-                id: socket.id,
-                userID: p.userID,
-                x: p.x,
-                y: p.y,
-                mapId: p.mapId,
-                appearance: p.appearance
-            });
+        if (p && p.worldId) {
+            Object.assign(p, data); // Sync x, y, mapId, appearance
+            
+            // Broadcast the update to everyone else in the world
+            socket.to(`world_${p.worldId}`).emit('playerUpdate', p);
         }
     });
 
     socket.on('disconnect', () => {
         const p = players[socket.id];
-        if (p && p.world) {
-            const world = worlds.find(w => w.id === p.world);
-            if (world && world.full > 0) world.full--;
-            socket.to(`world_${p.world}`).emit('playerLeft', socket.id);
+        if (p && p.worldId) {
+            socket.to(`world_${p.worldId}`).emit('playerLeft', socket.id);
         }
         delete players[socket.id];
     });
 });
 
-server.listen(3000, () => console.log('Server running on :3000'));
+server.listen(3000, () => console.log('Socket Server running on :3000'));
