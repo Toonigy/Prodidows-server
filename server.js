@@ -42,10 +42,6 @@ app.use(express.urlencoded({ extended: true }));
 const publicPath = path.join(__dirname, 'public');
 app.use(express.static(publicPath));
 
-// Firebase-style UID for the primary player
-const MOCK_USER_ID = "firebase_user_12345"; 
-const MOCK_TOKEN = "google-auth-token-placeholder";
-
 // Global state for worlds and players
 const activePlayers = new Map();
 
@@ -89,8 +85,6 @@ const MOCK_OPPONENT = {
 
 const worldsResponse = (req, res) => {
   const count = activePlayers.size;
-  const maxPopulation = 200;
-  
   res.json([{
     id: "local-1",
     worldId: "local-1", 
@@ -98,21 +92,26 @@ const worldsResponse = (req, res) => {
     host: "localhost",
     port: 3000,
     population: count, 
-    full: Math.min(count, maxPopulation), 
-    max: maxPopulation,
-    status: count >= maxPopulation ? "full" : "online",
+    full: count + 10,
+    max: 200,
+    status: "online",
     recommended: true
   }]);
 };
 
 app.get(['/game-api/v1/worlds', '/game-api/v2/worlds'], worldsResponse);
 
+/**
+ * FIXED SESSION HANDLING
+ * game.min.js expects session info to contain the real Firebase UID.
+ */
 app.get('/game-api/v2/session', (req, res) => {
+  // We use a mock session for the browser, but real clients will have their own UIDs
   res.json({ 
     success: true, 
-    userID: MOCK_USER_ID, 
-    token: MOCK_TOKEN, 
-    name: "Google User",
+    userID: req.query.uid || "firebase_user_12345", 
+    token: "placeholder-token", 
+    name: "User Session",
     firebaseConfig: firebaseConfig
   });
 });
@@ -123,7 +122,7 @@ const characterResponse = (req, res) => {
     success: true,
     data: {
         userID: uid,
-        name: uid === MOCK_USER_ID ? "Prodigy Player" : `Player ${uid.substring(0,4)}`,
+        name: `Player ${uid.substring(0,6)}`,
         stars: 999,
         level: 100,
         appearance: { hair: { color: 1, style: 1 }, gender: "male" },
@@ -141,12 +140,12 @@ app.get(['/game-api/v1/character/:userId', '/game-api/v2/character/:userId'], ch
  */
 app.post(['/game-api/v1/switchZones', '/game-api/v2/switchZones'], (req, res) => {
     const { zoneName, userID } = req.body;
-    console.log(`[API] User ${userID || 'unknown'} switching zone to: ${zoneName}`);
+    console.log(`[API] User ${userID} switching zone to: ${zoneName}`);
     
-    // Update internal state if we can find the player by userID
     activePlayers.forEach((player, socketId) => {
         if (player.userID === userID) {
             player.zone = zoneName;
+            io.to(socketId).emit('playerList', getFormattedPlayerList());
         }
     });
 
@@ -167,8 +166,7 @@ app.get(['/game-api/v1/leaderboard', '/game-api/v2/leaderboard'], (req, res) => 
     res.json({
         success: true,
         data: [
-            { userID: MOCK_USER_ID, name: "You", stars: 999, rank: 1 },
-            { userID: MOCK_OPPONENT_ID, name: "Bot", stars: 500, rank: 2 }
+            { userID: "lead_1", name: "Champion", stars: 9999, rank: 1 }
         ]
     });
 });
@@ -178,16 +176,13 @@ app.get(['/game-api/v1/user-ranking/:userId', '/game-api/v2/user-ranking/:userId
         success: true,
         data: {
             userID: req.params.userId,
-            rank: 1,
-            stars: 999,
+            rank: 5,
+            stars: 100,
             winStreak: 0
         }
     });
 });
 
-/**
- * MATCHMAKING / CHALLENGER HANDLER
- */
 app.get(['/game-api/v1/matchmake', '/game-api/v2/matchmake'], (req, res) => {
     res.json({
         success: true,
@@ -232,20 +227,22 @@ io.on('connection', (socket) => {
   const { userId } = socket.handshake.query;
   
   let uid = userId;
-  if (!uid || uid === 'undefined' || uid === 'null') {
-      uid = `user_${Math.random().toString(36).substr(2, 9)}`;
+  if (!uid || uid === 'undefined') {
+      uid = `anon_${Math.random().toString(36).substr(2, 9)}`;
   } else {
       uid = String(uid);
   }
   
   console.log(`[Socket] Client connected: ${socket.id} (User: ${uid})`);
 
+  socket.emit('playerList', getFormattedPlayerList());
+
   socket.on('join', (data) => {
-    console.log(`[Socket] Player ${uid} joined zone: ${data?.zone || 'forest'}`);
+    console.log(`[Socket] Player ${uid} joined.`);
     
     const playerData = {
         userID: uid,
-        name: data?.name || (uid === MOCK_USER_ID ? "Prodigy Player" : `Player ${uid.substring(0,5)}`),
+        name: data?.name || `Player ${uid.substring(0,5)}`,
         x: data?.x || 500,
         y: data?.y || 500,
         isMember: true,
@@ -258,25 +255,26 @@ io.on('connection', (socket) => {
 
     activePlayers.set(socket.id, playerData);
 
-    // Initial data sync
+    // Sync state
     socket.emit('playerList', getFormattedPlayerList());
     socket.emit('ready', { success: true });
     
-    // Update everyone
+    // Broadcast join
     io.emit('playerJoined', uid);
+    io.emit('playerAdded', uid); 
     io.emit('playerList', getFormattedPlayerList());
   });
 
   socket.on('message', (payload) => {
-      // Special handler for zone switching via socket
+      // Ensure we have a valid UID for the sender
+      const sender = activePlayers.get(socket.id);
+      const senderUid = sender ? sender.userID : uid;
+
       if (payload.action === 'switch_zone') {
-          const player = activePlayers.get(socket.id);
-          if (player) {
-              console.log(`[Socket] ${uid} moved to ${payload.data.zoneName}`);
-              player.zone = payload.data.zoneName;
-              
-              // Broadcast the zone change so others can filter visibility
+          if (sender) {
+              sender.zone = payload.data.zoneName;
               io.emit('playerList', getFormattedPlayerList());
+              socket.emit('playerList', getFormattedPlayerList());
           }
       }
 
@@ -300,15 +298,20 @@ io.on('connection', (socket) => {
                   break;
           }
       } else {
-          // General broadcast (chat, movements, etc)
-          io.emit('message', { from: uid, ...payload });
+          io.emit('message', { from: senderUid, ...payload });
       }
   });
 
   socket.on('disconnect', () => {
-    activePlayers.delete(socket.id);
-    io.emit('playerLeft', uid);
-    io.emit('playerList', getFormattedPlayerList());
+    const player = activePlayers.get(socket.id);
+    if (player) {
+        const puid = player.userID;
+        activePlayers.delete(socket.id);
+        io.emit('playerLeft', puid);
+        io.emit('playerRemoved', puid);
+        io.emit('playerList', getFormattedPlayerList());
+        console.log(`[Socket] Player Disconnected: ${puid}`);
+    }
   });
 });
 
