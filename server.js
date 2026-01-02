@@ -51,7 +51,6 @@ const activePlayers = new Map();
 
 /**
  * OPPONENT DATA TEMPLATE
- * Updated with more detailed pet data for the battle engine
  */
 const MOCK_OPPONENT_ID = "bot_challenger_99999";
 const MOCK_OPPONENT = {
@@ -77,7 +76,10 @@ const MOCK_OPPONENT = {
             stars: 10,
             catchDate: Date.now(),
             assignable: true,
-            order: 0
+            order: 0,
+            starsToLevel: 100,
+            power: 50,
+            vitality: 50
         }
     ],
     team: []
@@ -87,6 +89,8 @@ const MOCK_OPPONENT = {
 
 const worldsResponse = (req, res) => {
   const count = activePlayers.size;
+  const maxPopulation = 200;
+  
   res.json([{
     id: "local-1",
     worldId: "local-1", 
@@ -94,9 +98,9 @@ const worldsResponse = (req, res) => {
     host: "localhost",
     port: 3000,
     population: count, 
-    full: count + 10,
-    max: 200,
-    status: "online",
+    full: Math.min(count, maxPopulation), 
+    max: maxPopulation,
+    status: count >= maxPopulation ? "full" : "online",
     recommended: true
   }]);
 };
@@ -114,12 +118,12 @@ app.get('/game-api/v2/session', (req, res) => {
 });
 
 const characterResponse = (req, res) => {
-  const uid = String(req.params.userId || MOCK_USER_ID);
+  const uid = String(req.params.userId);
   res.json({
     success: true,
     data: {
         userID: uid,
-        name: "Prodigy Player",
+        name: uid === MOCK_USER_ID ? "Prodigy Player" : `Player ${uid.substring(0,4)}`,
         stars: 999,
         level: 100,
         appearance: { hair: { color: 1, style: 1 }, gender: "male" },
@@ -133,23 +137,58 @@ const characterResponse = (req, res) => {
 app.get(['/game-api/v1/character/:userId', '/game-api/v2/character/:userId'], characterResponse);
 
 /**
- * ZONE SWITCHING HANDLER
+ * ZONE SWITCHING HANDLER (REST API)
  */
 app.post(['/game-api/v1/switchZones', '/game-api/v2/switchZones'], (req, res) => {
-    const { zoneName } = req.body;
-    console.log(`[API] Player switching zone to: ${zoneName}`);
+    const { zoneName, userID } = req.body;
+    console.log(`[API] User ${userID || 'unknown'} switching zone to: ${zoneName}`);
+    
+    // Update internal state if we can find the player by userID
+    activePlayers.forEach((player, socketId) => {
+        if (player.userID === userID) {
+            player.zone = zoneName;
+        }
+    });
+
     res.json({ success: true });
 });
 
+/**
+ * FRIEND API HANDLERS
+ */
 app.get(['/game-api/v1/friend/:userId/countFriendRequest', '/friend-api/v1/friend/:userId/countFriendRequest'], (req, res) => {
   res.json({ success: true, count: 0, pendingRequests: [], invites: [] });
+});
+
+/**
+ * ARENA / PVP API HANDLERS
+ */
+app.get(['/game-api/v1/leaderboard', '/game-api/v2/leaderboard'], (req, res) => {
+    res.json({
+        success: true,
+        data: [
+            { userID: MOCK_USER_ID, name: "You", stars: 999, rank: 1 },
+            { userID: MOCK_OPPONENT_ID, name: "Bot", stars: 500, rank: 2 }
+        ]
+    });
+});
+
+app.get(['/game-api/v1/user-ranking/:userId', '/game-api/v2/user-ranking/:userId'], (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            userID: req.params.userId,
+            rank: 1,
+            stars: 999,
+            winStreak: 0
+        }
+    });
 });
 
 /**
  * MATCHMAKING / CHALLENGER HANDLER
  */
 app.get(['/game-api/v1/matchmake', '/game-api/v2/matchmake'], (req, res) => {
-    console.log(`[Matchmaker] Finding challenger for user...`);
     res.json({
         success: true,
         data: {
@@ -166,18 +205,13 @@ app.post('/game-event', (req, res) => {
 });
 
 /**
- * WILDCARD HANDLER / ERROR CATCHER
+ * WILDCARD HANDLER
  */
 app.use((req, res, next) => {
     if (req.url.includes('[object') || req.url.includes('undefined')) {
-        console.warn(`[Server] Intercepted malformed request: ${req.url}`);
         return res.json({ success: true, data: {} });
     }
     next();
-});
-
-app.all(/^\/undefinedv\d\/.*/, (req, res) => {
-    res.json({ success: true });
 });
 
 app.get('/', (req, res) => {
@@ -198,22 +232,20 @@ io.on('connection', (socket) => {
   const { userId } = socket.handshake.query;
   
   let uid = userId;
-  if (!uid || uid === 'undefined') {
-      uid = `anon_${Math.random().toString(36).substr(2, 9)}`;
+  if (!uid || uid === 'undefined' || uid === 'null') {
+      uid = `user_${Math.random().toString(36).substr(2, 9)}`;
   } else {
       uid = String(uid);
   }
   
   console.log(`[Socket] Client connected: ${socket.id} (User: ${uid})`);
 
-  socket.emit('playerList', getFormattedPlayerList());
-
   socket.on('join', (data) => {
-    console.log(`[Socket] Player ${uid} joined.`);
+    console.log(`[Socket] Player ${uid} joined zone: ${data?.zone || 'forest'}`);
     
     const playerData = {
         userID: uid,
-        name: data?.name || "Other Player",
+        name: data?.name || (uid === MOCK_USER_ID ? "Prodigy Player" : `Player ${uid.substring(0,5)}`),
         x: data?.x || 500,
         y: data?.y || 500,
         isMember: true,
@@ -226,23 +258,31 @@ io.on('connection', (socket) => {
 
     activePlayers.set(socket.id, playerData);
 
+    // Initial data sync
+    socket.emit('playerList', getFormattedPlayerList());
     socket.emit('ready', { success: true });
     
+    // Update everyone
+    io.emit('playerJoined', uid);
     io.emit('playerList', getFormattedPlayerList());
-    socket.broadcast.emit('playerJoined', uid);
   });
 
-  /**
-   * PVP LOADING & BATTLE SYNC
-   * Handlers for message format required by PVPLoading class
-   */
   socket.on('message', (payload) => {
+      // Special handler for zone switching via socket
+      if (payload.action === 'switch_zone') {
+          const player = activePlayers.get(socket.id);
+          if (player) {
+              console.log(`[Socket] ${uid} moved to ${payload.data.zoneName}`);
+              player.zone = payload.data.zoneName;
+              
+              // Broadcast the zone change so others can filter visibility
+              io.emit('playerList', getFormattedPlayerList());
+          }
+      }
+
       if (String(payload.target) === MOCK_OPPONENT_ID) {
-          console.log(`[PVP] Handling ${payload.action} for bot battle`);
-          
           switch (payload.action) {
               case "request_data":
-                  // Engine needs 'from' and 'action' inside the response
                   socket.emit('message', {
                       action: "data",
                       from: MOCK_OPPONENT_ID,
@@ -255,37 +295,20 @@ io.on('connection', (socket) => {
                       }
                   });
                   break;
-                  
               case "request_init":
-                  socket.emit('message', {
-                      action: "init",
-                      from: MOCK_OPPONENT_ID,
-                      data: {}
-                  });
-                  break;
-                  
-              case "switch_zone":
-                  socket.emit('message', {
-                      action: "zone_switched",
-                      from: MOCK_OPPONENT_ID,
-                      data: { zone: payload.data.zoneName }
-                  });
+                  socket.emit('message', { action: "init", from: MOCK_OPPONENT_ID, data: {} });
                   break;
           }
       } else {
-          console.log(`[Message] From ${uid} to ${payload.target}:`, payload.text || payload.action);
+          // General broadcast (chat, movements, etc)
           io.emit('message', { from: uid, ...payload });
       }
   });
 
-  socket.on('battleLog', (log) => {
-      console.log(`[Battle] Log from ${uid}:`, log);
-  });
-
   socket.on('disconnect', () => {
-    console.log(`[Socket] User ${uid} disconnected`);
     activePlayers.delete(socket.id);
     io.emit('playerLeft', uid);
+    io.emit('playerList', getFormattedPlayerList());
   });
 });
 
