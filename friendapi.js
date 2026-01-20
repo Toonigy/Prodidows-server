@@ -4,15 +4,15 @@ const axios = require('axios');
 
 /**
  * Friend API Module
- * Manages social relationships and real-time status tracking for friends.
- * Patched to support /friend-api/v1 pathing used by the game engine.
+ * Updated to return data inside a 'data' block to satisfy the game engine's 
+ * FriendsListNetworkHandler.getTotalFriendRequestsSuccess logic:
+ * this.pendingRequests = e.data.pendingRequests
  */
 
-module.exports = (activePlayers, RTDB_URL, FB_SECRET) => {
+module.exports = (activePlayers, RTDB_URL, FB_SECRET, Debugger) => {
 
     const authParam = FB_SECRET ? `?auth=${FB_SECRET}` : "";
 
-    // Helper: Check if a UID is currently connected to the socket server
     const isOnline = (uid) => {
         if (!uid || uid === "undefined") return false;
         for (let player of activePlayers.values()) {
@@ -21,33 +21,53 @@ module.exports = (activePlayers, RTDB_URL, FB_SECRET) => {
         return false;
     };
 
-    /**
-     * GET /friend-api/v1/friend/:uid/countFriendRequest
-     * Specific endpoint for the notification badge in the game UI.
-     */
     router.get('/v1/friend/:uid/countFriendRequest', async (req, res) => {
         const uid = req.params.uid;
-        if (!uid || uid === "undefined") {
-            return res.json({ success: true, count: 0 });
-        }
+        if (Debugger) Debugger.trackEvent('friend_request_count_check', { uid });
+
+        // IMPORTANT: The game engine expects 'data.pendingRequests'
+        const defaultResponse = {
+            success: true,
+            data: {
+                pendingRequests: 0
+            },
+            meta: { friendsCap: 100, totalFriends: 0 }
+        };
+
+        if (!uid || uid === "undefined") return res.json(defaultResponse);
 
         try {
-            const response = await axios.get(`${RTDB_URL}/friendRequests/${uid}.json${authParam}`);
-            const requests = response.data || {};
-            const pendingCount = Object.values(requests).filter(r => r.status === "pending").length;
+            const [requestRes, friendsRes] = await Promise.all([
+                axios.get(`${RTDB_URL}/friendRequests/${uid}.json${authParam}`),
+                axios.get(`${RTDB_URL}/friends/${uid}.json${authParam}`)
+            ]);
+
+            const requests = requestRes.data || {};
+            const friends = friendsRes.data || {};
             
-            res.json({ success: true, count: pendingCount });
+            const pendingCount = Object.values(requests).filter(r => r.status === "pending").length;
+            const totalFriends = Object.keys(friends).length;
+            
+            res.json({ 
+                success: true, 
+                data: {
+                    pendingRequests: pendingCount
+                },
+                meta: {
+                    friendsCap: 100,
+                    totalFriends: totalFriends
+                }
+            });
         } catch (error) {
-            res.json({ success: true, count: 0 }); // Fallback to 0 to prevent UI crash
+            if (Debugger) Debugger.trackError('Friend Request Count', error);
+            res.json(defaultResponse); 
         }
     });
 
-    /**
-     * GET /friends/:uid or /friend-api/v1/friend/:uid
-     * Fetches the friend list with online status.
-     */
     const getFriends = async (req, res) => {
         const uid = req.params.uid;
+        if (Debugger) Debugger.trackEvent('friend_list_fetch', { uid });
+
         if (!uid || uid === "undefined") return res.json({ success: true, friends: [] });
 
         try {
@@ -61,37 +81,15 @@ module.exports = (activePlayers, RTDB_URL, FB_SECRET) => {
                 lastSeen: friendData[friendUid].lastSeen || Date.now()
             }));
 
-            res.json({ success: true, friends });
+            res.json({ success: true, friends: friends });
         } catch (error) {
-            console.error(`[FriendAPI] Error fetching friends for ${uid}:`, error.message);
+            if (Debugger) Debugger.trackError('Get Friends List', error);
             res.status(500).json({ success: false, error: "Failed to load friends" });
         }
     };
 
     router.get('/:uid', getFriends);
     router.get('/v1/friend/:uid', getFriends);
-
-    /**
-     * POST /friends/request
-     */
-    router.post('/request', async (req, res) => {
-        const { fromUid, toUid, fromName } = req.body;
-        if (!fromUid || !toUid || fromUid === "undefined" || toUid === "undefined") {
-            return res.status(400).json({ success: false, error: "Missing or invalid UIDs" });
-        }
-
-        try {
-            await axios.patch(`${RTDB_URL}/friendRequests/${toUid}/${fromUid}.json${authParam}`, {
-                name: fromName || "Wizard",
-                timestamp: Date.now(),
-                status: "pending"
-            });
-
-            res.json({ success: true, message: "Friend request sent" });
-        } catch (error) {
-            res.status(500).json({ success: false, error: "Database error" });
-        }
-    });
 
     return router;
 };
