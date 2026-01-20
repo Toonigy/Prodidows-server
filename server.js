@@ -2,320 +2,189 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const cors = require('cors');
+
+// --- MODULE IMPORTS ---
+const worldListRouter = require('./worldlist');
+const matchmakingRouter = require('./matchmaking');
+const leaderboardRouter = require('./leaderboard');
+const playerBroadcastFactory = require('./playerbroadcast');
+const playerListFactory = require('./playerlist');
+const debuggerFactory = require('./debugger');
+const friendApiRouter = require('./friendapi');
+const registerFactory = require('./register');
 
 const app = express();
 const server = http.createServer(app);
 
-/**
- * FIREBASE CONFIGURATION
- */
-const firebaseConfig = {
-  apiKey: "AIzaSyAkqq1G5oxjdN5z-rYApExpJvlEiXG04os",
-  authDomain: "prodigyplus1500.firebaseapp.com",
-  databaseURL: "https://prodigyplus1500-default-rtdb.firebaseio.com",
-  projectId: "prodigyplus1500",
-  storageBucket: "prodigyplus1500.firebasestorage.app",
-  messagingSenderId: "457513275768",
-  appId: "1:457513275768:web:4527fe6ad1892798e5f88d",
-  measurementId: "G-4L0QLCF2HD"
-};
-
-/**
- * LEGACY SOCKET.IO SUPPORT
- */
-const io = new Server(server, {
-  cors: { 
-    origin: "*", 
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  allowEIO3: true, 
-  path: '/socket.io/',
-  pingInterval: 10000,
-  pingTimeout: 5000,
-  transports: ['websocket', 'polling']
-});
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-const publicPath = path.join(__dirname, 'public');
-app.use(express.static(publicPath));
-
-// Global state for worlds and players
-const activePlayers = new Map();
-
-/**
- * OPPONENT DATA TEMPLATE
- */
-const MOCK_OPPONENT_ID = "bot_challenger_99999";
-const MOCK_OPPONENT = {
-    userID: MOCK_OPPONENT_ID,
-    name: "Training Bot",
-    level: 50,
-    stars: 100,
-    winStreak: 5,
-    isMember: true,
-    appearance: { hair: { color: 2, style: 2 }, gender: "female" },
-    equipment: { hat: 2, weapon: 2, boots: 2, outfit: 2 },
-    data: { 
-        mouth: 1, eyes: 1, skin: 1, 
-        tutorial: { battle: true, complete: true } 
+// --- 1. ENHANCED UTILS & TRACING ---
+const Util = {
+    log: (msg, type = "INFO") => {
+        const timestamp = new Date().toLocaleTimeString();
+        const colors = { INFO: "\x1b[36m", ERROR: "\x1b[31m", DEBUG: "\x1b[33m", SUCCESS: "\x1b[32m", SOCKET: "\x1b[35m" };
+        const reset = "\x1b[0m";
+        const prefix = `[${timestamp}] ${colors[type] || ""}[${type}]\x1b[0m`;
+        console.log(`${prefix} ${typeof msg === 'object' ? JSON.stringify(msg) : msg}`);
     },
-    pets: [
-        { 
-            ID: 12, 
-            nickname: "Bot Pet", 
-            level: 50, 
-            hp: 500, 
-            maxHP: 500, 
-            stars: 10,
-            catchDate: Date.now(),
-            assignable: true,
-            order: 0,
-            starsToLevel: 100,
-            power: 50,
-            vitality: 50
-        }
-    ],
-    team: []
+    ERROR: "ERROR", INFO: "INFO", DEBUG: "DEBUG", SUCCESS: "SUCCESS", SOCKET: "SOCKET"
 };
 
-// --- API ROUTES ---
-
-const worldsResponse = (req, res) => {
-  const count = activePlayers.size;
-  res.json([{
-    id: "local-1",
-    worldId: "local-1", 
-    name: "Localhost Forest",
-    host: "localhost",
-    port: 3000,
-    population: count, 
-    full: count + 10,
-    max: 200,
-    status: "online",
-    recommended: true
-  }]);
-};
-
-app.get(['/game-api/v1/worlds', '/game-api/v2/worlds'], worldsResponse);
-
-/**
- * FIXED SESSION HANDLING
- * game.min.js expects session info to contain the real Firebase UID.
- */
-app.get('/game-api/v2/session', (req, res) => {
-  // We use a mock session for the browser, but real clients will have their own UIDs
-  res.json({ 
-    success: true, 
-    userID: req.query.uid || "firebase_user_12345", 
-    token: "placeholder-token", 
-    name: "User Session",
-    firebaseConfig: firebaseConfig
-  });
-});
-
-const characterResponse = (req, res) => {
-  const uid = String(req.params.userId);
-  res.json({
-    success: true,
-    data: {
-        userID: uid,
-        name: `Player ${uid.substring(0,6)}`,
-        stars: 999,
-        level: 100,
-        appearance: { hair: { color: 1, style: 1 }, gender: "male" },
-        equipment: { hat: 1, weapon: 1, boots: 1, outfit: 1 },
-        inventory: [],
-        isGoogleAccount: true
-    }
-  });
-};
-
-app.get(['/game-api/v1/character/:userId', '/game-api/v2/character/:userId'], characterResponse);
-
-/**
- * ZONE SWITCHING HANDLER (REST API)
- */
-app.post(['/game-api/v1/switchZones', '/game-api/v2/switchZones'], (req, res) => {
-    const { zoneName, userID } = req.body;
-    console.log(`[API] User ${userID} switching zone to: ${zoneName}`);
-    
-    activePlayers.forEach((player, socketId) => {
-        if (player.userID === userID) {
-            player.zone = zoneName;
-            io.to(socketId).emit('playerList', getFormattedPlayerList());
-        }
-    });
-
-    res.json({ success: true });
-});
-
-/**
- * FRIEND API HANDLERS
- */
-app.get(['/game-api/v1/friend/:userId/countFriendRequest', '/friend-api/v1/friend/:userId/countFriendRequest'], (req, res) => {
-  res.json({ success: true, count: 0, pendingRequests: [], invites: [] });
-});
-
-/**
- * ARENA / PVP API HANDLERS
- */
-app.get(['/game-api/v1/leaderboard', '/game-api/v2/leaderboard'], (req, res) => {
-    res.json({
-        success: true,
-        data: [
-            { userID: "lead_1", name: "Champion", stars: 9999, rank: 1 }
-        ]
-    });
-});
-
-app.get(['/game-api/v1/user-ranking/:userId', '/game-api/v2/user-ranking/:userId'], (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            userID: req.params.userId,
-            rank: 5,
-            stars: 100,
-            winStreak: 0
-        }
-    });
-});
-
-app.get(['/game-api/v1/matchmake', '/game-api/v2/matchmake'], (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            opponentID: MOCK_OPPONENT_ID,
-            ...MOCK_OPPONENT
-        }
-    });
-});
-
-app.post('/game-event', (req, res) => {
-    const { name, category } = req.body;
-    if (name) console.log(`[Analytics] ${name} (${category})`);
-    res.json({ success: true });
-});
-
-/**
- * WILDCARD HANDLER
- */
-app.use((req, res, next) => {
-    if (req.url.includes('[object') || req.url.includes('undefined')) {
-        return res.json({ success: true, data: {} });
-    }
-    next();
-});
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
-});
-
-// --- MULTIPLAYER LOGIC ---
-
-function getFormattedPlayerList() {
-    const players = {};
-    activePlayers.forEach((data) => {
-        players[String(data.userID)] = data;
-    });
-    return players;
-}
-
-io.on('connection', (socket) => {
-  const { userId } = socket.handshake.query;
-  
-  let uid = userId;
-  if (!uid || uid === 'undefined') {
-      uid = `anon_${Math.random().toString(36).substr(2, 9)}`;
-  } else {
-      uid = String(uid);
-  }
-  
-  console.log(`[Socket] Client connected: ${socket.id} (User: ${uid})`);
-
-  socket.emit('playerList', getFormattedPlayerList());
-
-  socket.on('join', (data) => {
-    console.log(`[Socket] Player ${uid} joined.`);
-    
-    const playerData = {
-        userID: uid,
-        name: data?.name || `Player ${uid.substring(0,5)}`,
-        x: data?.x || 500,
-        y: data?.y || 500,
-        isMember: true,
-        level: data?.level || 100,
-        appearance: data?.appearance || { hair: { color: 1, style: 1 }, gender: "male" },
-        equipment: data?.equipment || { hat: 1, weapon: 1, boots: 1, outfit: 1 },
-        zone: data?.zone || "forest",
-        team: data?.team || []
-    };
-
-    activePlayers.set(socket.id, playerData);
-
-    // Sync state
-    socket.emit('playerList', getFormattedPlayerList());
-    socket.emit('ready', { success: true });
-    
-    // Broadcast join
-    io.emit('playerJoined', uid);
-    io.emit('playerAdded', uid); 
-    io.emit('playerList', getFormattedPlayerList());
-  });
-
-  socket.on('message', (payload) => {
-      // Ensure we have a valid UID for the sender
-      const sender = activePlayers.get(socket.id);
-      const senderUid = sender ? sender.userID : uid;
-
-      if (payload.action === 'switch_zone') {
-          if (sender) {
-              sender.zone = payload.data.zoneName;
-              io.emit('playerList', getFormattedPlayerList());
-              socket.emit('playerList', getFormattedPlayerList());
-          }
-      }
-
-      if (String(payload.target) === MOCK_OPPONENT_ID) {
-          switch (payload.action) {
-              case "request_data":
-                  socket.emit('message', {
-                      action: "data",
-                      from: MOCK_OPPONENT_ID,
-                      data: {
-                          userID: MOCK_OPPONENT_ID,
-                          equipment: MOCK_OPPONENT.equipment,
-                          appearance: MOCK_OPPONENT.appearance,
-                          data: MOCK_OPPONENT.data,
-                          pets: MOCK_OPPONENT.pets
-                      }
-                  });
-                  break;
-              case "request_init":
-                  socket.emit('message', { action: "init", from: MOCK_OPPONENT_ID, data: {} });
-                  break;
-          }
-      } else {
-          io.emit('message', { from: senderUid, ...payload });
-      }
-  });
-
-  socket.on('disconnect', () => {
-    const player = activePlayers.get(socket.id);
-    if (player) {
-        const puid = player.userID;
-        activePlayers.delete(socket.id);
-        io.emit('playerLeft', puid);
-        io.emit('playerRemoved', puid);
-        io.emit('playerList', getFormattedPlayerList());
-        console.log(`[Socket] Player Disconnected: ${puid}`);
-    }
-  });
-});
-
+const RTDB_URL = "https://prodigyplus1500-default-rtdb.firebaseio.com";
+const FB_SECRET = "LXcv3gZauf3URT0sVCdLGLZhMGX36svcNfHIAPVY";
 const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// --- 4. SHARED STATE ---
+const activePlayers = new Map();
+const uidToSocket = new Map();
+const matchmakingQueue = []; 
+
+const io = new Server(server, { 
+    cors: { origin: "*" }, 
+    transports: ['websocket', 'polling']
 });
+
+// --- 5. INITIALIZE MODULES ---
+const PlayerListManager = playerListFactory(activePlayers);
+const Debugger = debuggerFactory(activePlayers, uidToSocket);
+const Broadcaster = playerBroadcastFactory(io, activePlayers);
+const RegisterManager = registerFactory(RTDB_URL, FB_SECRET, Util);
+
+// --- 6. SOCKET.IO LOGIC ---
+io.on('connection', (socket) => {
+    Util.log(`New Connection: ${socket.id}`, Util.SOCKET);
+    
+    // Initially mark as connecting
+    activePlayers.set(socket.id, { userID: "Connecting...", socketId: socket.id });
+    
+    // Send current player list immediately upon connection (your request)
+    socket.emit('playerList', PlayerListManager.getFormattedPlayerList());
+    
+    // Tell client we need their ID
+    socket.emit('need_registration');
+
+    socket.on('register', async (uid) => {
+        if (!uid) return;
+        Util.log(`Registering UID: ${uid}`, Util.INFO);
+        
+        const playerData = await RegisterManager.getCharacterData(uid);
+        if (playerData) {
+            uidToSocket.set(uid, socket.id);
+            
+            // Join the socket room for the UID
+            socket.join(uid);
+            socket.emit('registered', { success: true, userID: uid });
+
+            /**
+             * Handle 'join' event. 
+             * This is the definitive point where a player enters the "Active" state.
+             * The engine sends this when the map is loaded.
+             */
+            socket.on('join', (data) => {
+                Util.log(`Player ${uid} broadcasting join to world.`, Util.INFO);
+                
+                // 1. Set the player as active FIRST so that Broadcaster/Manager can find them
+                activePlayers.set(socket.id, { ...playerData, socketId: socket.id });
+
+                // 2. Tell the sender they are successfully joined/ready
+                socket.emit('ready', { success: true });
+
+                // 3. Broadcast to all clients the refreshed player list
+                const currentList = PlayerListManager.getFormattedPlayerList();
+                Util.log(`Broadcasting updated playerList (${currentList.length} players)`, Util.DEBUG);
+                
+                // Send specifically to the joining player
+                socket.emit('playerList', currentList);
+                // Send to everyone else
+                io.emit('playerList', currentList);
+
+                // 4. Global broadcast that this UID is now available
+                io.emit('playerJoined', uid);
+                io.emit('playerAdded', uid);
+
+                // 5. Standard engine join broadcast (appearance/position)
+                socket.broadcast.emit('join', {
+                    userID: uid,
+                    appearance: playerData.appearance,
+                    x: data?.x || 0,
+                    y: data?.y || 0
+                });
+
+                // 6. Broadcaster module updates (full info syncing)
+                Broadcaster.announceJoin(socket, playerData);
+            });
+
+            /**
+             * The game engine specifically listens for "message" events.
+             */
+            socket.on('message', (payload) => {
+                Util.log(`Message from ${uid}: ${typeof payload === 'string' ? payload : 'Object'}`, Util.DEBUG);
+                socket.broadcast.emit('message', payload);
+            });
+            
+            Util.log(`Player ${playerData.name} registered and waiting for join signal.`, Util.SUCCESS);
+        } else {
+            Util.log(`Registration Failed for UID: ${uid}`, Util.ERROR);
+        }
+    });
+
+    socket.on('move', (data) => {
+        const p = activePlayers.get(socket.id);
+        if (p && p.userID && p.userID !== "Connecting...") {
+            p.x = data.x;
+            p.y = data.y;
+            Broadcaster.broadcastMove(socket, p);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        const p = activePlayers.get(socket.id);
+        if (p?.userID && p.userID !== "Connecting...") {
+            Util.log(`Player Left: ${p.name} (${p.userID})`, Util.INFO);
+            uidToSocket.delete(p.userID);
+            Broadcaster.announceLeave(p.userID);
+            
+            // Re-broadcast list after disconnect so others see the update
+            const currentList = PlayerListManager.getFormattedPlayerList();
+            io.emit('playerList', currentList);
+            Util.log(`Updated playerList after disconnect (${currentList.length} remaining)`, Util.DEBUG);
+        }
+        activePlayers.delete(socket.id);
+    });
+});
+
+/**
+ * REST ROUTES
+ */
+const worldsRouter = worldListRouter(activePlayers, PlayerListManager);
+app.use('/worlds', worldsRouter);
+app.use('/game-api/v2/worlds', worldsRouter); // Alias for engine-specific world list requests
+
+app.use('/matchmaking-api', matchmakingRouter(activePlayers, matchmakingQueue, io));
+
+// Engine uses both /friends and /friend-api/v1/...
+const friendsRouter = friendApiRouter(activePlayers, RTDB_URL, FB_SECRET, Debugger);
+app.use('/friends', friendsRouter);
+app.use('/friend-api', friendsRouter);
+
+/**
+ * GAME EVENT TELEMETRY
+ * Handles the engine's requests to /game-event.
+ * Supports both POST (event submission) and GET (engine health checks).
+ */
+app.route('/game-event')
+    .get((req, res) => {
+        // Handle engine health checks or ping tests
+        res.status(200).json({ success: true, status: "ready" });
+    })
+    .post((req, res) => {
+        const eventData = req.body;
+        // Log telemetry via Debugger if available
+        if (Debugger) Debugger.trackEvent('game_telemetry', eventData);
+        res.status(200).json({ success: true });
+    });
+
+server.listen(PORT, () => Util.log(`Server live on port ${PORT}`, Util.SUCCESS));
