@@ -101,8 +101,12 @@ const handleSocialFallback = (req, res) => {
     });
 };
 
+// --- 6. ROUTES ---
 app.all(['/game-event', '/game-api/v2/game-event', '/events'], handleGameEvent);
 app.get(['/friend/get-all', '/friend/requests', '/friend/invites'], handleSocialFallback);
+
+// Add the matchmaking route here:
+app.use(['/matchmaking-api', '/game-api/v2/matchmaking'], matchmakingRouter); 
 
 app.use(['/worlds', '/game-api/v2/worlds'], worldListRouter(activePlayers, PlayerListManager));
 app.use('/leaderboard', leaderboardRouter(activePlayers, (d) => d));
@@ -306,3 +310,4 @@ io.on('connection', async (socket) => {
 server.listen(PORT, () => {
     Util.log(`Multiplayer Server active on port ${PORT}`, Util.SUCCESS, "Init");
 });
+
