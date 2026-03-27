@@ -23,6 +23,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 // In-memory state for active players
 const players = new Map();
 
+/**
+ * GAME API ENDPOINTS
+ * Adding the missing endpoints discovered in the console logs.
+ */
+
+// Route for fetching available worlds
+app.get('/game-api/v2/worlds', (req, res) => {
+    // We return a mock list of worlds that the game client expects.
+    // You can customize the names and IDs here.
+    res.json({
+        worlds: [
+            {
+                id: "prodidows-1",
+                name: "Prodidows Main",
+                host: "prodidows-server.onrender.com",
+                port: 443,
+                population: players.size,
+                maxPopulation: 200,
+                status: "online"
+            }
+        ]
+    });
+});
+
 // Fallback route for the root (if index.html isn't automatically picked up)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
