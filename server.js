@@ -14,6 +14,9 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+// Middleware to parse JSON bodies for POST requests
+app.use(express.json());
+
 /**
  * SERVE STATIC FILES
  * This serves the 'public' folder where your index.html and game.min.js are located.
@@ -25,14 +28,10 @@ const players = new Map();
 
 /**
  * GAME API ENDPOINTS
- * Fixed the /worlds endpoint to return an array directly to prevent the .sort() TypeError.
  */
 
 // Route for fetching available worlds
 app.get('/game-api/v2/worlds', (req, res) => {
-    // The game client calls .sort() on the response 'e'. 
-    // If we return { worlds: [] }, 'e' is an object and lacks .sort().
-    // We return the array directly to satisfy Prodigy.Menu.Server.getSuggested.
     const worldsList = [
         {
             id: "prodidows-1",
@@ -41,12 +40,25 @@ app.get('/game-api/v2/worlds', (req, res) => {
             port: 443,
             population: players.size,
             maxPopulation: 200,
-            full: Math.floor((players.size / 200) * 100), // Added 'full' property for the sorting logic
+            full: Math.floor((players.size / 200) * 100),
             status: "online"
         }
     ];
     
     res.json(worldsList);
+});
+
+/**
+ * NEW: Event Tracking Endpoint
+ * Handles POST requests to /game-event to resolve 404 errors.
+ * These are usually telemetry or analytics sent by the Prodigy client.
+ */
+app.post('/game-event', (req, res) => {
+    // Log the event if you want to see what the game is reporting
+    // console.log('[Game Event]:', req.body);
+    
+    // Respond with 200 OK so the client knows it was received
+    res.status(200).json({ status: "success" });
 });
 
 // Fallback route for the root (if index.html isn't automatically picked up)
