@@ -49,15 +49,11 @@ app.get('/game-api/v2/worlds', (req, res) => {
 });
 
 /**
- * NEW: Event Tracking Endpoint
- * Handles POST requests to /game-event to resolve 404 errors.
- * These are usually telemetry or analytics sent by the Prodigy client.
+ * Event Tracking Endpoint
+ * Handles both GET and POST requests to /game-event to resolve 404 and "Cannot GET" errors.
  */
-app.post('/game-event', (req, res) => {
-    // Log the event if you want to see what the game is reporting
-    // console.log('[Game Event]:', req.body);
-    
-    // Respond with 200 OK so the client knows it was received
+app.all('/game-event', (req, res) => {
+    // Respond with 200 OK for any method (GET, POST, etc.)
     res.status(200).json({ status: "success" });
 });
 
