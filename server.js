@@ -25,26 +25,28 @@ const players = new Map();
 
 /**
  * GAME API ENDPOINTS
- * Adding the missing endpoints discovered in the console logs.
+ * Fixed the /worlds endpoint to return an array directly to prevent the .sort() TypeError.
  */
 
 // Route for fetching available worlds
 app.get('/game-api/v2/worlds', (req, res) => {
-    // We return a mock list of worlds that the game client expects.
-    // You can customize the names and IDs here.
-    res.json({
-        worlds: [
-            {
-                id: "prodidows-1",
-                name: "Prodidows Main",
-                host: "prodidows-server.onrender.com",
-                port: 443,
-                population: players.size,
-                maxPopulation: 200,
-                status: "online"
-            }
-        ]
-    });
+    // The game client calls .sort() on the response 'e'. 
+    // If we return { worlds: [] }, 'e' is an object and lacks .sort().
+    // We return the array directly to satisfy Prodigy.Menu.Server.getSuggested.
+    const worldsList = [
+        {
+            id: "prodidows-1",
+            name: "Prodidows Main",
+            host: "prodidows-server.onrender.com",
+            port: 443,
+            population: players.size,
+            maxPopulation: 200,
+            full: Math.floor((players.size / 200) * 100), // Added 'full' property for the sorting logic
+            status: "online"
+        }
+    ];
+    
+    res.json(worldsList);
 });
 
 // Fallback route for the root (if index.html isn't automatically picked up)
@@ -57,7 +59,6 @@ io.on('connection', (socket) => {
 
     // Standard Handshake: When a player joins the world
     socket.on('join_world', (data) => {
-        // Create player object with data from client
         const playerInfo = {
             id: socket.id,
             userId: data.userId,
@@ -69,10 +70,7 @@ io.on('connection', (socket) => {
         
         players.set(socket.id, playerInfo);
 
-        // Tell the new player about everyone else currently online
         socket.emit('current_players', Array.from(players.values()));
-
-        // Tell everyone else about the new player
         socket.broadcast.emit('new_player', playerInfo);
     });
 
@@ -83,7 +81,6 @@ io.on('connection', (socket) => {
             player.x = moveData.x;
             player.y = moveData.y;
             
-            // Broadcast the new coordinates to other players
             socket.broadcast.emit('player_moved', {
                 id: socket.id,
                 x: moveData.x,
@@ -92,12 +89,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Custom Patch Logs (Monitoring client-side events from game.min.js)
+    // Custom Patch Logs
     socket.on('patch_log', (data) => {
         console.log(`[Client Log][Ver: ${data.version}] ${data.message}`);
     });
 
-    // Battle Initialization: Handling challenges between players
+    // Battle Initialization
     socket.on('start_battle', (battleData) => {
         const targetId = battleData.targetId;
         if (players.has(targetId)) {
@@ -108,7 +105,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Cleanup: Remove player from map when they disconnect
+    // Cleanup
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
         players.delete(socket.id);
