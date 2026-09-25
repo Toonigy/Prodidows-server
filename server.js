@@ -57,6 +57,33 @@ const worldsHandler = (req, res) => {
 
 app.get(['/v2/worlds', '/game-api/v2/worlds', '/worlds'], worldsHandler);
 
+app.post('/matchmaking-api/begin', (req, res) => {
+    const { userID, level, score, playerData, token } = req.body;
+    
+    // Add your matchmaking queue or logic here
+    console.log(`User ${userID} started matchmaking at level ${level}`);
+
+    // Respond with status 200 and any expected success data
+    res.status(200).json({
+        success: true,
+        message: "Successfully joined matchmaking queue."
+    });
+});
+
+// Handle matchmaking end/quit request
+app.post('/matchmaking-api/end', (req, res) => {
+    const { userID, token } = req.body;
+    
+    // Add your logic to remove user from matchmaking queue here
+    console.log(`User ${userID} quit matchmaking.`);
+
+    // Respond with status 200
+    res.status(200).json({
+        success: true,
+        message: "Successfully left matchmaking queue."
+    });
+});
+
 const characterHandler = (req, res) => {
     const id = req.params.id || "fb_default";
     res.json({
