@@ -32,8 +32,8 @@ app.get('/v1/status', (req, res) => {
     res.status(200).send({ status: "OK", timestamp: Date.now() });
 });
 
-// Worlds list API
-app.get('/v2/worlds', (req, res) => {
+// Worlds list API for both /v2/worlds and /game-api/v2/worlds
+const worldsHandler = (req, res) => {
     res.status(200).json([
         {
             id: 1,
@@ -44,6 +44,12 @@ app.get('/v2/worlds', (req, res) => {
             population: 1
         }
     ]);
+};
+
+app.get('/v2/worlds', worldsHandler);
+app.get('/game-api/v2/worlds', worldsHandler);
+app.get('/game-api/v1/status', (req, res) => {
+    res.status(200).send({ status: "OK", timestamp: Date.now() });
 });
 
 // Login endpoint
