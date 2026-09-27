@@ -51,25 +51,31 @@ const worldsHandler = (req, res) => {
 app.get('/v2/worlds', worldsHandler);
 app.get('/game-api/v2/worlds', worldsHandler);
 
-// Matchmaking API endpoints
-app.post('/matchmaking-api/begin', (req, res) => {
-    console.log('[MATCHMAKING] Begin request received:', req.body);
+// Matchmaking API endpoints (Supporting both GET and POST for maximum client compatibility)
+const matchmakingBeginHandler = (req, res) => {
+    console.log('[MATCHMAKING] Begin request received:', req.method, req.body || req.query);
     res.status(200).json({
         success: true,
         matchID: "match-12345",
         opponent: {
             userID: "opponent-9876",
             name: "Practice Wizard",
-            level: req.body.level || 10,
-            score: req.body.score || 1000
+            level: (req.body && req.body.level) || (req.query && req.query.level) || 10,
+            score: (req.body && req.body.score) || (req.query && req.query.score) || 1000
         }
     });
-});
+};
 
-app.post('/matchmaking-api/end', (req, res) => {
-    console.log('[MATCHMAKING] End/Quit request received:', req.body);
+const matchmakingEndHandler = (req, res) => {
+    console.log('[MATCHMAKING] End/Quit request received:', req.method, req.body || req.query);
     res.status(200).json({ success: true });
-});
+};
+
+app.post('/matchmaking-api/begin', matchmakingBeginHandler);
+app.get('/matchmaking-api/begin', matchmakingBeginHandler);
+
+app.post('/matchmaking-api/end', matchmakingEndHandler);
+app.get('/matchmaking-api/end', matchmakingEndHandler);
 
 // Login endpoint
 app.post('/v1/login/:worldId', (req, res) => {
