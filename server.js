@@ -51,6 +51,26 @@ const worldsHandler = (req, res) => {
 app.get('/v2/worlds', worldsHandler);
 app.get('/game-api/v2/worlds', worldsHandler);
 
+// Matchmaking API endpoints
+app.post('/matchmaking-api/begin', (req, res) => {
+    console.log('[MATCHMAKING] Begin request received:', req.body);
+    res.status(200).json({
+        success: true,
+        matchID: "match-12345",
+        opponent: {
+            userID: "opponent-9876",
+            name: "Practice Wizard",
+            level: req.body.level || 10,
+            score: req.body.score || 1000
+        }
+    });
+});
+
+app.post('/matchmaking-api/end', (req, res) => {
+    console.log('[MATCHMAKING] End/Quit request received:', req.body);
+    res.status(200).json({ success: true });
+});
+
 // Login endpoint
 app.post('/v1/login/:worldId', (req, res) => {
     const { username } = req.body;
