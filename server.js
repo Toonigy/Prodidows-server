@@ -132,27 +132,37 @@ app.get('/v1/game-event', (req, res) => {
     res.status(200).json({ success: true });
 });
 
-app.post('/events-api/v1/game-event', (req, res) => {
-    console.log('[EVENTS] Received game event (POST):', req.body || req.query);
+const gameEventHandler = (req, res) => {
+    console.log('[EVENTS] Received game event:', req.method, req.body || req.query);
     res.status(200).json({ success: true });
-});
-app.get('/events-api/v1/game-event', (req, res) => {
-    console.log('[EVENTS] Received game event (GET):', req.query);
-    res.status(200).json({ success: true });
-});
+};
+
+app.post('/events-api/v1/game-event', gameEventHandler);
+app.get('/events-api/v1/game-event', gameEventHandler);
+app.post('/game-api/v1/game-event', gameEventHandler);
+app.get('/game-api/v1/game-event', gameEventHandler);
+
+// In-memory active players map for multiplayer room tracking
+const activePlayers = new Map();
 
 io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId || "12345678";
     const worldId = socket.handshake.query.worldId || "1";
     const zone = socket.handshake.query.zone || "lamplight";
+    
     console.log(`[SOCKET] User connected: ${userId} in world ${worldId}, zone ${zone}`);
+    
+    activePlayers.set(socket.id, { userID: userId, zone, x: 400, y: 300 });
 
-    // Send initial mock player list matching client expectations
-    socket.emit('playerList', [
-        { userID: userId, x: 400, y: 300, zone: zone }
-    ]);
+    // Build current player list for the connecting client
+    const playerListArray = Array.from(activePlayers.values()).map(p => ({
+        userID: p.userID,
+        x: p.x,
+        y: p.y,
+        zone: p.zone
+    }));
 
-    // Broadcast when a new player joins or performs actions
+    socket.emit('playerList', playerListArray);
     socket.broadcast.emit('playerJoined', userId);
 
     socket.on('message', (data) => {
@@ -162,10 +172,15 @@ io.on('connection', (socket) => {
 
     socket.on('switchZone', (zoneData) => {
         console.log(`[SOCKET] User switched zone:`, zoneData);
+        const player = activePlayers.get(socket.id);
+        if (player) {
+            player.zone = zoneData.zone || zoneData;
+        }
     });
 
     socket.on('disconnect', () => {
         console.log(`[SOCKET] User disconnected: ${userId}`);
+        activePlayers.delete(socket.id);
         socket.broadcast.emit('playerLeft', userId);
     });
 });
