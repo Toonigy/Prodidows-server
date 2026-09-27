@@ -25,7 +25,7 @@ app.use(express.static(path.join(__dirname)));
 
 // Status check endpoints
 app.get('/status', (req, res) => {
-    res.status(200).send({ status: "OK", timestamp: Date.now() });
+    res.status(200).send({ status: "OK", timestawmp: Date.now() });
 });
 app.get('/v1/status', (req, res) => {
     res.status(200).send({ status: "OK", timestamp: Date.now() });
@@ -146,7 +146,7 @@ app.get('/game-api/v1/game-event', gameEventHandler);
 const activePlayers = new Map();
 
 io.on('connection', (socket) => {
-    const userId = socket.handshake.query.userId || "12345678";
+    const userId = socket.handshake.query.userId || socket.handshake.query.userToken || "12345678";
     const worldId = socket.handshake.query.worldId || "1";
     const zone = socket.handshake.query.zone || "lamplight";
     
@@ -166,6 +166,12 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('playerJoined', userId);
 
     socket.on('message', (data) => {
+        // Ensure data contains valid sender userID if not already present
+        if (data && typeof data === 'object') {
+            if (!data.userID) {
+                data.userID = userId;
+            }
+        }
         console.log(`[SOCKET] Message received from ${userId}:`, data);
         socket.broadcast.emit('message', data);
     });
@@ -175,6 +181,7 @@ io.on('connection', (socket) => {
         const player = activePlayers.get(socket.id);
         if (player) {
             player.zone = zoneData.zone || zoneData;
+            socket.broadcast.emit('playerSwitchedZone', { userID: userId, zone: player.zone });
         }
     });
 
