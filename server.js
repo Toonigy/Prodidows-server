@@ -128,6 +128,18 @@ app.post('/v1/log/:level', (req, res) => {
 app.post('/v1/game-event', (req, res) => {
     res.status(200).json({ success: true });
 });
+app.get('/v1/game-event', (req, res) => {
+    res.status(200).json({ success: true });
+});
+
+app.post('/events-api/v1/game-event', (req, res) => {
+    console.log('[EVENTS] Received game event (POST):', req.body || req.query);
+    res.status(200).json({ success: true });
+});
+app.get('/events-api/v1/game-event', (req, res) => {
+    console.log('[EVENTS] Received game event (GET):', req.query);
+    res.status(200).json({ success: true });
+});
 
 io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId || "12345678";
