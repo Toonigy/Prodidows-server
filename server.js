@@ -1,7 +1,9 @@
 const express = require('express');
-const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
+const bodyParser = require('body-parser');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,185 +16,118 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Serve static files from root folder (index.html, game.min.js, assets, etc.)
 app.use(express.static(path.join(__dirname)));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyDmvTnNZtnW4AwxtjimDedpE-owbosgBpw",
-    authDomain: "primdorial-mmo.firebaseapp.com",
-    databaseURL: "https://primdorial-mmo-default-rtdb.firebaseio.com",
-    projectId: "primdorial-mmo",
-    storageBucket: "primdorial-mmo.firebasestorage.app",
-    messagingSenderId: "373426559896",
-    appId: "1:373426559896:web:0825a489c230748d9d69ed",
-    measurementId: "G-BWSDP0KRYH"
-};
 
-const loginHandler = (req, res) => {
-    const username = req.params.username || req.body.username || "WizardHero";
-    console.log(`[AUTH] Login attempt for username: ${username} ( Firebase Project: ${FIREBASE_CONFIG.projectId} )`);
-    
-    const firebaseUserId = "fb_" + Buffer.from(username).toString('hex').slice(0, 10);
+// Status check endpoint expected by ApiClient
+app.get('/status', (req, res) => {
+    res.status(200).send({ status: "OK", timestamp: Date.now() });
+});
+app.get('/v1/status', (req, res) => {
+    res.status(200).send({ status: "OK", timestamp: Date.now() });
+});
 
-    res.json({
-        success: true,
-        authToken: "mock-firebase-token-" + Date.now(),
-        userID: firebaseUserId,
-        username: username,
-        isMember: true,
-        firebaseConfig: FIREBASE_CONFIG
-    });
-};
-
-app.post(['/v1/login/:username', '/game-api/v1/login/:username', '/v1/login', '/game-api/v1/login'], loginHandler);
-
-const worldsHandler = (req, res) => {
-    // Providing numeric 'full' property so game.min.js 'getSuggested' method computes valid green bars/status
-    res.json([
-        { id: 1, name: "Server Alpha (Firebase)", ip: "localhost", port: PORT, population: "Normal", online: true, full: 45 },
-        { id: 2, name: "Server Beta (Firebase)", ip: "localhost", port: PORT, population: "Crowded", online: true, full: 70 }
+// Worlds list API
+app.get('/v2/worlds', (req, res) => {
+    res.status(200).json([
+        {
+            id: 1,
+            name: "Alpha World",
+            ip: "localhost",
+            port: PORT,
+            online: true,
+            population: 1
+        }
     ]);
-};
+});
 
-app.get(['/v2/worlds', '/game-api/v2/worlds', '/worlds'], worldsHandler);
-
-app.post('/matchmaking-api/begin', (req, res) => {
-    const { userID, level, score, playerData, token } = req.body;
-    
-    // Add your matchmaking queue or logic here
-    console.log(`User ${userID} started matchmaking at level ${level}`);
-
-    // Respond with status 200 and any expected success data
+// Login endpoint
+app.post('/v1/login/:worldId', (req, res) => {
+    const { username } = req.body;
+    console.log(`[LOGIN] User logging into world ${req.params.worldId}`);
     res.status(200).json({
-        success: true,
-        message: "Successfully joined matchmaking queue."
+        userID: "12345678",
+        authToken: "mock-auth-token-1-50-0",
+        username: username || "WizardPlayer",
+        success: true
     });
 });
 
-// Handle matchmaking end/quit request
-app.post('/matchmaking-api/end', (req, res) => {
-    const { userID, token } = req.body;
-    
-    // Add your logic to remove user from matchmaking queue here
-    console.log(`User ${userID} quit matchmaking.`);
-
-    // Respond with status 200
+// User Character info / data endpoints
+app.get('/v1/characters/:userId', (req, res) => {
     res.status(200).json({
-        success: true,
-        message: "Successfully left matchmaking queue."
-    });
-});
-
-const characterHandler = (req, res) => {
-    const id = req.params.id || "fb_default";
-    res.json({
-        userID: id,
-        name: "WizardHero",
+        userID: req.params.userId,
         data: {
-            appearance: { hair: 1, eyes: 1, skin: 1, outfit: 1 },
-            backpack: { items: [] },
-            pets: [],
-            level: 15,
-            gold: 10000,
-            stars: 500,
-            firebaseProjectId: FIREBASE_CONFIG.projectId
+            name: "Prodigy Wizard",
+            hair: { style: 1, color: 1 },
+            outfit: { style: 1, color: 1 },
+            level: 10,
+            gold: 5000,
+            tutorial: { complete: true }
         }
     });
-};
+});
 
-app.get(['/v1/characters/:id', '/game-api/v1/characters/:id', '/characters/:id', '/game-api/characters/:id'], characterHandler);
+app.post('/v1/characters/:userId', (req, res) => {
+    res.status(200).json({ success: true });
+});
 
-const gameEventHandler = (req, res) => {
-    console.log(`[EVENT] Received game event tracking request for Firebase DB:`, req.body || req.query);
-    res.json({ success: true, message: "Event tracked successfully to Firebase Realtime DB" });
-};
+app.post('/v1/users/:userId', (req, res) => {
+    res.status(200).json({ success: true });
+});
 
-app.all(['/events-api/v1/game-event', '/v1/game-event', '/game-api/v1/game-event', '/game-api/events-api/v1/game-event'], gameEventHandler);
+// Education & Skills endpoints
+app.get('/v1/users/:userId/education', (req, res) => {
+    res.status(200).json([{
+        grade: 3,
+        skills: []
+    }]);
+});
 
-const activePlayers = new Map();
+// Logging and tracking endpoints
+app.post('/v1/log/:level', (req, res) => {
+    res.status(200).json({ success: true });
+});
+
+app.post('/v1/game-event', (req, res) => {
+    res.status(200).json({ success: true });
+});
 
 io.on('connection', (socket) => {
-    const query = socket.handshake.query || {};
-    console.log(`[SOCKET] Client connected: ${socket.id}`, query);
+    const userId = socket.handshake.query.userId;
+    const worldId = socket.handshake.query.worldId;
+    console.log(`[SOCKET] User connected: ${userId} in world ${worldId}`);
 
-    let playerId = query.userId && query.userId !== 'undefined' ? query.userId : ('user_' + socket.id.slice(0, 6));
-    const worldId = query.worldId && query.worldId !== 'undefined' ? query.worldId : '1';
-    let currentZone = query.zone && query.zone !== 'undefined' ? query.zone : 'zone-login';
-
-    const playerData = {
-        socketId: socket.id,
-        userID: String(playerId),
-        worldId: String(worldId),
-        zone: String(currentZone)
-    };
-    activePlayers.set(socket.id, playerData);
-
-    let roomName = `world_${worldId}_zone_${currentZone}`;
-    socket.join(roomName);
-
-    const getRoomPlayers = (wId, zName) => {
-        const list = [];
-        for (const p of activePlayers.values()) {
-            if (p.worldId === wId && p.zone === zName) {
-                list.push({ userID: String(p.userID) });
-            }
-        }
-        return list;
-    };
-
-    const initialPlayers = getRoomPlayers(worldId, currentZone);
-    socket.emit('playerList', initialPlayers);
-
-    // Broadcast player joined with object payload containing userID as expected by onPlayerJoined
-    socket.to(roomName).emit('playerJoined', { userID: playerData.userID });
-    console.log(`[SOCKET] Player ${playerData.userID} joined zone ${currentZone}. Room list count:`, initialPlayers.length);
+    // Notify client of successful connection
+    socket.emit('connect');
+    
+    // Send mock player list
+    socket.emit('playerList', [
+        { userID: userId, x: 400, y: 300, zone: "lamplight" }
+    ]);
 
     socket.on('message', (data) => {
-        socket.to(roomName).emit('message', data);
+        // Broadcast message to other players or echo back
+        socket.broadcast.emit('message', data);
     });
 
-    // Handle full player info broadcast from client for syncing appearance/data
-    socket.on('playerFullInfo', (data) => {
-        if (data && data.userID) {
-            socket.to(roomName).emit('playerFullInfo', data);
-        }
+    socket.on('switchZone', (zoneData) => {
+        console.log(`[SOCKET] User switched zone:`, zoneData);
     });
 
-    socket.on('switchZone', (newZone) => {
-        console.log(`[SOCKET] Player ${playerData.userID} switching zone from ${currentZone} to ${newZone}`);
-        
-        socket.to(roomName).emit('playerLeft', String(playerData.userID));
-        socket.leave(roomName);
-        
-        currentZone = newZone && newZone !== 'undefined' ? newZone : 'zone-login';
-        playerData.zone = currentZone;
-        roomName = `world_${worldId}_zone_${currentZone}`;
-        
-        socket.join(roomName);
-
-        socket.to(roomName).emit('playerJoined', { userID: playerData.userID });
-
-        const updatedRoomPlayers = getRoomPlayers(worldId, currentZone);
-        socket.emit('playerList', updatedRoomPlayers);
-    });
-
-    socket.on('disconnect', (reason) => {
-        console.log(`[SOCKET] Client disconnected: ${socket.id} (Player ${playerData.userID}), Reason: ${reason}`);
-        
-        socket.to(roomName).emit('playerLeft', String(playerData.userID));
-        activePlayers.delete(socket.id);
-    });
-
-    socket.on('error', (err) => {
-        console.log(`[SOCKET] Error on client ${socket.id}:`, err);
+    socket.on('disconnect', () => {
+        console.log(`[SOCKET] User disconnected: ${userId}`);
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`========================================`);
-    console.log(` Prodigy 1.50.0 Server is running!`);
-    console.log(` Connected to Firebase: primdorial-mmo`);
-    console.log(` Open http://localhost:${PORT} in your browser.`);
-    console.log(`========================================`);
+    console.log(`=========================================`);
+    console.log(` Prodigy 1-50-0 Server running successfully`);
+    console.log(` Open http://localhost:${PORT} in your browser`);
+    console.log(`=========================================`);
 });
