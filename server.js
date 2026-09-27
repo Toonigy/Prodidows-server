@@ -23,16 +23,18 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Serve static files from root folder (index.html, game.min.js, assets, etc.)
 app.use(express.static(path.join(__dirname)));
 
-
-// Status check endpoint expected by ApiClient
+// Status check endpoints
 app.get('/status', (req, res) => {
     res.status(200).send({ status: "OK", timestamp: Date.now() });
 });
 app.get('/v1/status', (req, res) => {
     res.status(200).send({ status: "OK", timestamp: Date.now() });
 });
+app.get('/game-api/v1/status', (req, res) => {
+    res.status(200).send({ status: "OK", timestamp: Date.now() });
+});
 
-// Worlds list API for both /v2/worlds and /game-api/v2/worlds
+// Worlds list API for /v2/worlds and /game-api/v2/worlds
 const worldsHandler = (req, res) => {
     res.status(200).json([
         {
@@ -48,9 +50,6 @@ const worldsHandler = (req, res) => {
 
 app.get('/v2/worlds', worldsHandler);
 app.get('/game-api/v2/worlds', worldsHandler);
-app.get('/game-api/v1/status', (req, res) => {
-    res.status(200).send({ status: "OK", timestamp: Date.now() });
-});
 
 // Login endpoint
 app.post('/v1/login/:worldId', (req, res) => {
@@ -105,20 +104,21 @@ app.post('/v1/game-event', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    const userId = socket.handshake.query.userId;
-    const worldId = socket.handshake.query.worldId;
-    console.log(`[SOCKET] User connected: ${userId} in world ${worldId}`);
+    const userId = socket.handshake.query.userId || "12345678";
+    const worldId = socket.handshake.query.worldId || "1";
+    const zone = socket.handshake.query.zone || "lamplight";
+    console.log(`[SOCKET] User connected: ${userId} in world ${worldId}, zone ${zone}`);
 
-    // Notify client of successful connection
-    socket.emit('connect');
-    
-    // Send mock player list
+    // Send initial mock player list matching client expectations
     socket.emit('playerList', [
-        { userID: userId, x: 400, y: 300, zone: "lamplight" }
+        { userID: userId, x: 400, y: 300, zone: zone }
     ]);
 
+    // Broadcast when a new player joins or performs actions
+    socket.broadcast.emit('playerJoined', userId);
+
     socket.on('message', (data) => {
-        // Broadcast message to other players or echo back
+        console.log(`[SOCKET] Message received from ${userId}:`, data);
         socket.broadcast.emit('message', data);
     });
 
@@ -128,6 +128,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`[SOCKET] User disconnected: ${userId}`);
+        socket.broadcast.emit('playerLeft', userId);
     });
 });
 
