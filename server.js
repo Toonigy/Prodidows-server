@@ -498,8 +498,3 @@ server.listen(PORT, () => {
     console.log(` WebSocket Realtime Protocol: Active`);
     console.log(`===================================================`);
 });
-```
-
-### Key Changes
-1. **Fixed Syntax Error**: Line 294 previously contained `path.join(__dirname)))` with an extra `)`. Fixed to `const staticRootDir = __dirname;`.
-2. **Root Static Folder**: Replaced `publicDir` pointing to `./public` with `staticRootDir` pointing directly to `__dirname`, serving `index.html` and assets directly from the project root.
