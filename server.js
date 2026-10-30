@@ -66,16 +66,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Express Request Logger (Development Debugging)
 app.use((req, res, next) => {
-    if (!req.path.startsWith('/public') && !req.path.includes('.')) {
+    if (!req.path.includes('.')) {
         console.log(`[HTTP] ${req.method} -> ${req.path}`);
     }
     next();
 });
 
-// -----------------------------------------------------------------------------
-// 3. HTTP REST Routes & Game API Endpoints
-// (MUST be defined BEFORE express.static and fallback handlers)
-// -----------------------------------------------------------------------------
+// Matchmaking Queue Store
+const matchmakingQueue = [];
 
 function processMatchmakingQueue() {
     if (matchmakingQueue.length >= 2) {
@@ -123,18 +121,21 @@ function processMatchmakingQueue() {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// 3. HTTP REST Routes & Game API Endpoints
+// -----------------------------------------------------------------------------
+
 // Matchmaking Begin Endpoint
 app.post(['/matchmaking-api/begin', '/v1/matchmaking/begin'], (req, res) => {
     const body = req.body || {};
     const query = req.query || {};
 
-    // Extract userID from root body, playerData, data, or query string
     let userID = body.userID || 
                  (body.playerData && body.playerData.userID) || 
                  (body.data && body.data.userID) || 
                  query.userID;
 
-    // Fallback: Assign auto-generated unique ID if still undefined to prevent pairing collision
     if (!userID || userID === 'undefined' || userID === 'null') {
         userID = `anon_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         console.warn(`[Matchmaking] Missing userID in request. Generated fallback: ${userID}`);
@@ -147,13 +148,11 @@ app.post(['/matchmaking-api/begin', '/v1/matchmaking/begin'], (req, res) => {
     const playerData = body.playerData || body.data || {};
     
     if (userID) {
-        // Remove existing queue entries for this user if re-queueing
         const existingIdx = matchmakingQueue.findIndex(p => p.userID === userID);
         if (existingIdx !== -1) {
             matchmakingQueue.splice(existingIdx, 1);
         }
 
-        // Add player to queue
         matchmakingQueue.push({
             userID,
             level,
@@ -162,7 +161,6 @@ app.post(['/matchmaking-api/begin', '/v1/matchmaking/begin'], (req, res) => {
             timestamp: Date.now()
         });
 
-        // Trigger check to pair waiting players
         processMatchmakingQueue();
     }
 
@@ -189,7 +187,13 @@ app.all(['/events-api/v1/game-event', '/events-api/*splat'], (req, res) => {
 
 // Matchmaking End / Quit Endpoint
 app.post(['/matchmaking-api/end', '/v1/matchmaking/end'], (req, res) => {
-    const { userID, token } = req.body || {};
+    const body = req.body || {};
+    const query = req.query || {};
+
+    const userID = body.userID || 
+                   (body.playerData && body.playerData.userID) || 
+                   query.userID;
+
     console.log(`[Matchmaking] End/Quit request for userID: ${userID}`);
     
     if (userID) {
@@ -256,7 +260,6 @@ app.get(['/friend-api/v1/friend/:userID', '/v1/friend/:userID'], (req, res) => {
 });
 
 app.get('/game-api/v2/worlds', (req, res) => {
-    // Prodigy client expects an Array directly or an object containing a array that can be sorted
     res.json([
         {
             id: 'world-1',
@@ -268,6 +271,7 @@ app.get('/game-api/v2/worlds', (req, res) => {
         }
     ]);
 });
+
 // Fallback handler for Friend API namespace
 app.use('/friend-api', (req, res) => {
     res.json({
@@ -287,10 +291,10 @@ app.get('/api/health', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// 4. Static Files & SPA Routing
+// 4. Static Files & Root Folder Serving
 // -----------------------------------------------------------------------------
 
-// Define static files public directory
+// Serve static assets directly from root folder (__dirname)
 const staticRootDir = __dirname;
 app.use(express.static(staticRootDir));
 
@@ -306,7 +310,6 @@ const rooms = new Map();
 
 const userToSocketMap = new Map();
 
-const matchmakingQueue = [];
 /**
  * Helper to join a player to a room and update tracking structures
  */
@@ -343,11 +346,8 @@ function joinRoom(socket, roomName) {
 io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
-    // Parse legacy query parameters sent by joinMultiplayerServer:
-    // query: "userId=" + p + "&worldId=" + e + "&userToken=" + g + "&zone=" + t
     const { userId, worldId, userToken, zone } = socket.handshake.query || {};
 
-    // Register initial player state using query params if available
     const playerObj = {
         id: socket.id,
         userId: userId || socket.id,
@@ -375,32 +375,28 @@ io.on('connection', (socket) => {
         });
     }
 
-    // Send player list to the joining player
     socket.emit('playerList', playersInRoom);
 
     // Handle initial player profile sync from client
-socket.on('initPlayer', (data) => {
-    const player = connectedPlayers.get(socket.id);
-    if (player) {
-        // Normalize both casing variations so client listeners never break
-        player.userID = data.userID || data.userId || player.userID;
-        player.userId = player.userID;
-        
-        if (player.userID) {
-            userToSocketMap.set(player.userID, socket.id);
+    socket.on('initPlayer', (data) => {
+        const player = connectedPlayers.get(socket.id);
+        if (player) {
+            player.userID = data.userID || data.userId || player.userID;
+            player.userId = player.userID;
+            
+            if (player.userID) {
+                userToSocketMap.set(player.userID, socket.id);
+            }
+
+            socket.to(player.room).emit('playerJoined', player);
+            socket.to(player.room).emit('playerUpdated', player);
         }
+    });
 
-        // Broadcast updated player data to everyone else in room
-        socket.to(player.room).emit('playerJoined', player);
-        socket.to(player.room).emit('playerUpdated', player);
-    }
-});
-
-    // Handle incoming legacy generic message emit (emitMessage function)
+    // Handle incoming legacy generic message emit
     socket.on('message', (msgData) => {
         const player = connectedPlayers.get(socket.id);
         if (player && msgData) {
-            // If message carries full player info, sync it to server state
             if (msgData.action === 'fullInfo' && msgData.data) {
                 if (msgData.data.appearance) player.appearance = msgData.data.appearance;
                 if (msgData.data.equipment) player.equipment = msgData.data.equipment;
@@ -409,7 +405,6 @@ socket.on('initPlayer', (data) => {
                 if (msgData.data.data) player.filterData = msgData.data.data;
             }
 
-            // Broadcast message to all other room members
             socket.to(player.room).emit('message', msgData);
         }
     });
@@ -422,7 +417,6 @@ socket.on('initPlayer', (data) => {
             player.y = data.y;
             if (data.direction) player.direction = data.direction;
 
-            // Broadcast movement to all players in the same room
             socket.to(player.room).emit('playerMoved', {
                 id: socket.id,
                 x: player.x,
@@ -452,12 +446,11 @@ socket.on('initPlayer', (data) => {
         }
     });
 
-    // Handle zone switching requested by switchZones (l.socket.emit("switchZone", e))
+    // Handle zone switching
     socket.on('switchZone', (targetZone) => {
         if (typeof targetZone === 'string' && targetZone.trim() !== '') {
             joinRoom(socket, targetZone);
 
-            // Send updated player list for the new zone
             const playersInRoom = [];
             if (rooms.has(targetZone)) {
                 rooms.get(targetZone).forEach((sId) => {
@@ -475,10 +468,19 @@ socket.on('initPlayer', (data) => {
         console.log(`[Socket] Client disconnected: ${socket.id}`);
         const player = connectedPlayers.get(socket.id);
 
-        if (player && player.room && rooms.has(player.room)) {
-            rooms.get(player.room).delete(socket.id);
-            // Notify using legacy event name 'playerLeft' passing socket.id / playerId
-            socket.to(player.room).emit('playerLeft', socket.id);
+        if (player) {
+            if (player.userId) {
+                userToSocketMap.delete(player.userId);
+                const qIdx = matchmakingQueue.findIndex(p => p.userID === player.userId);
+                if (qIdx !== -1) {
+                    matchmakingQueue.splice(qIdx, 1);
+                }
+            }
+
+            if (player.room && rooms.has(player.room)) {
+                rooms.get(player.room).delete(socket.id);
+                socket.to(player.room).emit('playerLeft', socket.id);
+            }
         }
 
         connectedPlayers.delete(socket.id);
@@ -492,7 +494,12 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`===================================================`);
     console.log(` Game Backend Server is listening on port: ${PORT}`);
-    console.log(` Static file directory: ${publicDir}`);
+    console.log(` Static file directory: ${staticRootDir}`);
     console.log(` WebSocket Realtime Protocol: Active`);
     console.log(`===================================================`);
 });
+```
+
+### Key Changes
+1. **Fixed Syntax Error**: Line 294 previously contained `path.join(__dirname)))` with an extra `)`. Fixed to `const staticRootDir = __dirname;`.
+2. **Root Static Folder**: Replaced `publicDir` pointing to `./public` with `staticRootDir` pointing directly to `__dirname`, serving `index.html` and assets directly from the project root.
