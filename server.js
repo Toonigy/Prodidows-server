@@ -291,10 +291,8 @@ app.get('/api/health', (req, res) => {
 // -----------------------------------------------------------------------------
 
 // Define static files public directory
-const publicDir = path.join(__dirname)));
-
-// Serve static client assets from public directory
-app.use(express.static(publicDir));
+const staticRootDir = __dirname;
+app.use(express.static(staticRootDir));
 
 // -----------------------------------------------------------------------------
 // 5. Socket.io Multiplayer Game Server Logic
