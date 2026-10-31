@@ -75,6 +75,31 @@ app.use((req, res, next) => {
 // Matchmaking Queue Store
 const matchmakingQueue = [];
 
+/**
+ * Helper to resolve socket ID for a player by checking maps, socket queries, and active players
+ */
+function findSocketIdByUserId(userID) {
+    if (!userID) return null;
+    
+    // 1. Check userToSocketMap with string conversion
+    const strUserId = String(userID);
+    if (userToSocketMap.has(strUserId)) {
+        return userToSocketMap.get(strUserId);
+    }
+    if (userToSocketMap.has(userID)) {
+        return userToSocketMap.get(userID);
+    }
+
+    // 2. Fallback search through connectedPlayers Map
+    for (const [sId, player] of connectedPlayers.entries()) {
+        if (String(player.userId) === strUserId || String(player.userID) === strUserId) {
+            return sId;
+        }
+    }
+
+    return null;
+}
+
 function processMatchmakingQueue() {
     if (matchmakingQueue.length >= 2) {
         const playerA = matchmakingQueue.shift();
@@ -82,43 +107,97 @@ function processMatchmakingQueue() {
 
         console.log(`[Matchmaking] Match found between ${playerA.userID} and ${playerB.userID}`);
 
-        // Construct the exact arena payload expected by Prodigy messageRecieved handler
+        const matchRoomId = `pvp_room_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+        // Construct match payload
         const matchPayload = {
+            roomId: matchRoomId,
+            data: {
+                mods: (playerA.playerData && playerA.playerData.mods) || (playerB.playerData && playerB.playerData.mods) || null
+            },
             playerA: {
-                id: playerA.userID,
-                userID: playerA.userID,
+                id: String(playerA.userID),
+                userID: String(playerA.userID),
                 data: playerA.playerData || {}
             },
             playerB: {
-                id: playerB.userID,
-                userID: playerB.userID,
+                id: String(playerB.userID),
+                userID: String(playerB.userID),
                 data: playerB.playerData || {}
             }
         };
 
-        // Find active socket IDs for both players
-        const socketIdA = userToSocketMap.get(playerA.userID);
-        const socketIdB = userToSocketMap.get(playerB.userID);
+        const socketIdA = findSocketIdByUserId(playerA.userID);
+        const socketIdB = findSocketIdByUserId(playerB.userID);
 
         const arenaMessage = {
             action: 'arena',
             type: 'arena',
+            roomId: matchRoomId,
             playerA: matchPayload.playerA,
             playerB: matchPayload.playerB,
             data: matchPayload
         };
 
-        // Send match found signal to Player A
-        if (socketIdA && io.sockets.sockets.get(socketIdA)) {
+        // Track ready status during PVPloading
+        const pvpRoomState = {
+            roomId: matchRoomId,
+            playerA: matchPayload.playerA,
+            playerB: matchPayload.playerB,
+            readyPlayers: new Set()
+        };
+
+        // Move sockets to match room & set room tracking
+        if (socketIdA) {
+            const socketA = io.sockets.sockets.get(socketIdA);
+            if (socketA) joinRoom(socketA, matchRoomId);
+
             io.to(socketIdA).emit('message', arenaMessage);
             io.to(socketIdA).emit('arena', arenaMessage);
+            io.to(socketIdA).emit('pvpMatch', matchPayload);
         }
 
-        // Send match found signal to Player B
-        if (socketIdB && io.sockets.sockets.get(socketIdB)) {
+        if (socketIdB) {
+            const socketB = io.sockets.sockets.get(socketIdB);
+            if (socketB) joinRoom(socketB, matchRoomId);
+
             io.to(socketIdB).emit('message', arenaMessage);
             io.to(socketIdB).emit('arena', arenaMessage);
+            io.to(socketIdB).emit('pvpMatch', matchPayload);
         }
+
+        // Send startPVP signal after preloading buffer to launch battle state
+        const broadcastStartPVP = () => {
+            console.log(`[Matchmaking] Emitting startPVP to room ${matchRoomId}`);
+            const startPayload = {
+                status: 'active',
+                roomId: matchRoomId,
+                turn: matchPayload.playerA.id,
+                playerA: matchPayload.playerA,
+                playerB: matchPayload.playerB,
+                mods: (matchPayload.data && matchPayload.data.mods) || null,
+                challengerID: matchPayload.playerA.id
+            };
+
+            // Emit to room and directly to socket targets
+            io.to(matchRoomId).emit('startPVP', startPayload);
+            io.to(matchRoomId).emit('message', {
+                action: 'startPVP',
+                data: startPayload
+            });
+
+            if (socketIdA) {
+                io.to(socketIdA).emit('startPVP', startPayload);
+                io.to(socketIdA).emit('message', { action: 'startPVP', data: startPayload });
+            }
+            if (socketIdB) {
+                io.to(socketIdB).emit('startPVP', startPayload);
+                io.to(socketIdB).emit('message', { action: 'startPVP', data: startPayload });
+            }
+        };
+
+        setTimeout(broadcastStartPVP, 1500);
+        setTimeout(broadcastStartPVP, 3000); // Redundant retry emit in case client was mid state-change
     }
 }
 
@@ -396,11 +475,12 @@ io.on('connection', (socket) => {
     socket.on('initPlayer', (data) => {
         const player = connectedPlayers.get(socket.id);
         if (player) {
-            player.userID = data.userID || data.userId || player.userID;
+            player.userID = String(data.userID || data.userId || player.userID);
             player.userId = player.userID;
             
             if (player.userID) {
                 userToSocketMap.set(player.userID, socket.id);
+                console.log(`[Socket] Registered userToSocketMap: ${player.userID} -> ${socket.id}`);
             }
 
             socket.to(player.room).emit('playerJoined', player);
@@ -415,29 +495,59 @@ io.on('connection', (socket) => {
             if (msgData.action === 'fullInfo' && msgData.data) {
                 if (msgData.data.appearance) player.appearance = msgData.data.appearance;
                 if (msgData.data.equipment) player.equipment = msgData.data.equipment;
-                if (msgData.data.userID) player.userId = msgData.data.userID;
+                if (msgData.data.userID) {
+                    player.userId = String(msgData.data.userID);
+                    player.userID = player.userId;
+                    userToSocketMap.set(player.userId, socket.id);
+                }
                 if (msgData.data.isMember !== undefined) player.isMember = msgData.data.isMember;
                 if (msgData.data.data) player.filterData = msgData.data.data;
+            }
+
+            // Respond directly to PVP handshake requests to unblock game client state machine
+            if (msgData.action === 'request_data') {
+                console.log(`[Socket] Received request_data from ${socket.id}. Replying with data payload.`);
+                socket.emit('message', {
+                    action: 'data',
+                    data: player.filterData || player.appearance || {}
+                });
+                socket.to(player.room).emit('message', msgData);
+                return;
+            }
+
+            if (msgData.action === 'request_init') {
+                console.log(`[Socket] Received request_init from ${socket.id}. Replying with init payload.`);
+                socket.emit('message', {
+                    action: 'init',
+                    data: {}
+                });
+                socket.to(player.room).emit('message', msgData);
+                return;
+            }
+
+            // Relay PVP battle actions and asset initialization requests
+            if (
+                msgData.action === 'pvpAction' ||
+                msgData.action === 'pvpTurn' ||
+                msgData.action === 'init' ||
+                msgData.action === 'data'
+            ) {
+                socket.to(player.room).emit('message', msgData);
+                return;
             }
 
             socket.to(player.room).emit('message', msgData);
         }
     });
 
-    // Handle player movement
-    socket.on('playerMove', (data) => {
+    // Handle explicit pvpAction socket events
+    socket.on('pvpAction', (actionData) => {
         const player = connectedPlayers.get(socket.id);
-        if (player) {
-            player.x = data.x;
-            player.y = data.y;
-            if (data.direction) player.direction = data.direction;
-
-            socket.to(player.room).emit('playerMoved', {
-                id: socket.id,
-                userId: player.userId || player.userID,
-                x: player.x,
-                y: player.y,
-                direction: player.direction
+        if (player && player.room) {
+            socket.to(player.room).emit('pvpAction', actionData);
+            socket.to(player.room).emit('message', {
+                action: 'pvpAction',
+                data: actionData
             });
         }
     });
