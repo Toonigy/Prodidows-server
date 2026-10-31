@@ -260,14 +260,25 @@ app.get(['/friend-api/v1/friend/:userID', '/v1/friend/:userID'], (req, res) => {
 });
 
 app.get('/game-api/v2/worlds', (req, res) => {
+    const playerCount = connectedPlayers.size;
+    const maxPlayers = 100;
+    const densityRatio = playerCount / maxPlayers;
+
+    let worldStatus = 'online';
+    if (densityRatio >= 1.0) {
+        worldStatus = 'full';
+    } else if (densityRatio >= 0.75) {
+        worldStatus = 'busy';
+    }
+
     res.json([
         {
             id: 'world-1',
             name: 'Harmony Island',
-            players: connectedPlayers.size,
-            maxPlayers: 100,
-            population: connectedPlayers.size,
-            status: 'online'
+            players: playerCount,
+            maxPlayers: maxPlayers,
+            population: playerCount,
+            status: worldStatus
         }
     ]);
 });
@@ -323,7 +334,7 @@ function joinRoom(socket, roomName) {
     if (oldRoom && rooms.has(oldRoom)) {
         socket.leave(oldRoom);
         rooms.get(oldRoom).delete(socket.id);
-        socket.to(oldRoom).emit('playerLeft', socket.id);
+        socket.to(oldRoom).emit('playerLeft', { id: socket.id, userId: player.userId || player.userID });
     }
 
     // Join new room
@@ -351,6 +362,7 @@ io.on('connection', (socket) => {
     const playerObj = {
         id: socket.id,
         userId: userId || socket.id,
+        userID: userId || socket.id,
         worldId: worldId || 'world-1',
         zone: zone || 'root',
         x: 0,
@@ -361,6 +373,9 @@ io.on('connection', (socket) => {
     };
 
     connectedPlayers.set(socket.id, playerObj);
+    if (playerObj.userId) {
+        userToSocketMap.set(playerObj.userId, socket.id);
+    }
 
     // Join room based on zone/room parameter
     joinRoom(socket, playerObj.room);
@@ -419,6 +434,7 @@ io.on('connection', (socket) => {
 
             socket.to(player.room).emit('playerMoved', {
                 id: socket.id,
+                userId: player.userId || player.userID,
                 x: player.x,
                 y: player.y,
                 direction: player.direction
@@ -440,6 +456,7 @@ io.on('connection', (socket) => {
             const sanitizedMsg = msg.trim().substring(0, 120);
             io.to(player.room).emit('chatBroadcast', {
                 id: socket.id,
+                userId: player.userId || player.userID,
                 name: player.name,
                 message: sanitizedMsg
             });
@@ -469,19 +486,30 @@ io.on('connection', (socket) => {
         const player = connectedPlayers.get(socket.id);
 
         if (player) {
-            if (player.userId) {
-                userToSocketMap.delete(player.userId);
-                const qIdx = matchmakingQueue.findIndex(p => p.userID === player.userId);
+            const effectiveUserId = player.userId || player.userID;
+            if (effectiveUserId) {
+                userToSocketMap.delete(effectiveUserId);
+                const qIdx = matchmakingQueue.findIndex(p => p.userID === effectiveUserId);
                 if (qIdx !== -1) {
                     matchmakingQueue.splice(qIdx, 1);
                 }
             }
 
+            // Notify clients in current room and clear room membership
             if (player.room && rooms.has(player.room)) {
                 rooms.get(player.room).delete(socket.id);
                 socket.to(player.room).emit('playerLeft', socket.id);
+                socket.to(player.room).emit('playerLeft', effectiveUserId);
             }
         }
+
+        // Global fallback cleanup: remove socket ID from all existing room Sets
+        rooms.forEach((socketSet, roomName) => {
+            if (socketSet.has(socket.id)) {
+                socketSet.delete(socket.id);
+                socket.to(roomName).emit('playerLeft', socket.id);
+            }
+        });
 
         connectedPlayers.delete(socket.id);
     });
