@@ -70,10 +70,10 @@ class GamePatches {
         const self = this;
         const pvpProto = window.Prodigy.Menu.PvP.prototype;
 
+        // Patch openMessage to start 7s bot countdown
         const originalOpenMessage = pvpProto.openMessage;
         const originalMessageRecieved = pvpProto.messageRecieved;
 
-        // Patch openMessage to start 7s bot countdown
         pvpProto.openMessage = function () {
             self.clearTimer();
 
@@ -98,8 +98,102 @@ class GamePatches {
             }
         };
 
+        // ---------------------------------------------------------------------
+        // Fix: Leaderboard & Arena Data parsing undefined .length errors
+        // ---------------------------------------------------------------------
+        this.patchArenaDataParsers();
+
+        // ---------------------------------------------------------------------
+        // Fix: QI.close is not a function error in closeQuestion / endCombat
+        // ---------------------------------------------------------------------
+        this.patchQuestionInterface();
+
         this.isApplied = true;
-        console.log("[GamePatches] Successfully applied GamePatches to Prodigy.Menu.PvP!");
+        console.log("[GamePatches] Successfully applied GamePatches to Prodigy.Menu.PvP & Question Interface!");
+    }
+
+    /**
+     * Safe patch for Arena container wizard loading to prevent undefined .length errors
+     */
+    patchArenaDataParsers() {
+        const applyArenaPatch = () => {
+            if (window.Prodigy && window.Prodigy.Container && window.Prodigy.Container.Arena) {
+                const arenaProto = window.Prodigy.Container.Arena.prototype;
+                if (arenaProto && arenaProto.loadWizardsComplete && !arenaProto._isPatchedForLength) {
+                    const origLoadWizardsComplete = arenaProto.loadWizardsComplete;
+                    arenaProto.loadWizardsComplete = function (res) {
+                        // Ensure incoming response has valid fallbacks so res.leaderboard / res.data / res.wizards aren't undefined
+                        if (!res) res = {};
+                        if (!res.leaderboard || !Array.isArray(res.leaderboard)) res.leaderboard = [];
+                        if (!res.data || !Array.isArray(res.data)) res.data = [];
+                        if (!res.wizards || !Array.isArray(res.wizards)) res.wizards = [];
+                        if (!res.members || !Array.isArray(res.members)) res.members = [];
+                        if (!res.players || !Array.isArray(res.players)) res.players = [];
+
+                        try {
+                            return origLoadWizardsComplete.call(this, res);
+                        } catch (err) {
+                            console.warn("[GamePatches] Caught error in loadWizardsComplete, applying defensive fallback:", err);
+                        }
+                    };
+                    arenaProto._isPatchedForLength = true;
+                    console.log("[GamePatches] Successfully attached patch to Prodigy.Container.Arena.prototype.loadWizardsComplete");
+                }
+            }
+        };
+
+        applyArenaPatch();
+        // Periodically retry applying in case Arena container component loads dynamically later
+        const retryInterval = setInterval(() => {
+            applyArenaPatch();
+            if (window.Prodigy && window.Prodigy.Container && window.Prodigy.Container.Arena && window.Prodigy.Container.Arena.prototype._isPatchedForLength) {
+                clearInterval(retryInterval);
+            }
+        }, 1000);
+    }
+
+    /**
+     * Patches PVP / Combat State prototypes to prevent QI.close uncaught errors
+     */
+    patchQuestionInterface() {
+        // Safe polyfill check on PVP state prototype if available
+        if (window.Prodigy && window.Prodigy.State && window.Prodigy.State.PVP) {
+            const pvpStateProto = window.Prodigy.State.PVP.prototype;
+            if (pvpStateProto && pvpStateProto.closeQuestion) {
+                const origCloseQuestion = pvpStateProto.closeQuestion;
+                pvpStateProto.closeQuestion = function () {
+                    // Ensure QI object has a dummy close method if missing
+                    if (this.QI && typeof this.QI.close !== "function") {
+                        console.warn("[GamePatches] QI.close was missing on QuestionInterface. Polyfilling dummy close().");
+                        this.QI.close = function () {};
+                    }
+                    try {
+                        return origCloseQuestion.apply(this, arguments);
+                    } catch (err) {
+                        console.warn("[GamePatches] Caught and suppressed QI.close error during closeQuestion:", err);
+                    }
+                };
+            }
+        }
+
+        // Global fallback listener / interceptor for any active PVP state instance
+        const game = GamePatches.getGameContext(this);
+        if (game && game.state && game.state.states && game.state.states.PVP) {
+            const pvpInstance = game.state.states.PVP;
+            if (pvpInstance && pvpInstance.closeQuestion) {
+                const origCloseQuestion = pvpInstance.closeQuestion;
+                pvpInstance.closeQuestion = function () {
+                    if (this.QI && typeof this.QI.close !== "function") {
+                        this.QI.close = function () {};
+                    }
+                    try {
+                        return origCloseQuestion.apply(this, arguments);
+                    } catch (err) {
+                        console.warn("[GamePatches] Intercepted runtime error in closeQuestion:", err);
+                    }
+                };
+            }
+        }
     }
 
     /**
@@ -224,13 +318,16 @@ class GamePatches {
     /**
      * Deobfuscated messageRecieved method.
      */
-    messageRecieved(data) {
+    messageRecieved(rawData) {
+        // Normalize payload in case event comes wrapped inside rawData.data
+        const data = (rawData && rawData.data) ? rawData.data : rawData;
         console.log("Matchmaking match response received:", data);
+
         const prodigy = GamePatches.getProdigyContext(this);
         const game = GamePatches.getGameContext(this);
 
-        if (!prodigy) {
-            console.error("[GamePatches] Unable to locate Prodigy instance context in messageRecieved.");
+        if (!prodigy || !data) {
+            console.error("[GamePatches] Invalid data or unable to locate Prodigy instance context in messageRecieved.", rawData);
             return;
         }
 
@@ -287,7 +384,126 @@ class GamePatches {
         if (game && game.prodigy && game.prodigy.api && typeof game.prodigy.api.cancelMatchmaking === "function") {
             game.prodigy.api.cancelMatchmaking(prodigy.network.userID);
         }
-        prodigy.pvp.start(data.playerA.id, prodigy.player, opponentPlayer, teleportCallback, true);
+
+        const matchRoom = data.roomId || (data.data && data.data.roomId) || "pvp_room";
+
+        // Start PVP state transition
+        if (prodigy.pvp && typeof prodigy.pvp.start === "function") {
+            prodigy.pvp.start(matchRoom, prodigy.player, opponentPlayer, teleportCallback, true);
+        }
+
+        // Close loading dialog / message overlay if still visible
+        if (this.message && typeof this.message.close === "function") {
+            this.message.close();
+        }
+
+        // Patch PVP state and Socket network hooks for battle turn sync
+        const socket = (prodigy.network && prodigy.network.socket) ? prodigy.network.socket : null;
+
+        // Ensure network zone messages route directly to PVP.onMessage
+        if (prodigy.network) {
+            const originalEmitMessage = prodigy.network.emitMessage;
+            prodigy.network.emitMessage = function (msg) {
+                if (socket && typeof socket.emit === "function") {
+                    socket.emit("message", msg);
+                    socket.emit("pvpAction", msg);
+                }
+                if (typeof originalEmitMessage === "function") {
+                    try { originalEmitMessage.apply(this, arguments); } catch (e) {}
+                }
+            };
+        }
+
+        if (socket && typeof socket.on === "function") {
+            const startBattleHandler = (startData) => {
+                console.log("[GamePatches] [DEBUG] startPVP socket signal received!", startData);
+                if (game && game.state && typeof game.state.start === "function") {
+                    const pvpState = game.state.states.PVP;
+                    const pvpLoadingState = game.state.states.PVPloading;
+
+                    console.log(`[GamePatches] [DEBUG] Current engine state: '${game.state.current}'`);
+
+                    if (pvpState) {
+                        pvpState.playerA = prodigy.player;
+                        pvpState.playerB = opponentPlayer;
+                        pvpState.teamA = (prodigy.player && typeof prodigy.player.getTeam === "function") ? prodigy.player.getTeam() : [prodigy.player];
+                        pvpState.teamB = (opponentPlayer && typeof opponentPlayer.getTeam === "function") ? opponentPlayer.getTeam() : [opponentPlayer];
+                        pvpState.mods = (startData && startData.mods) || (pvpLoadingState && pvpLoadingState._data ? pvpLoadingState._data.mods : null);
+                        pvpState.zoneName = "pvp";
+                        pvpState.challengerID = (startData && startData.challengerID) || (data.playerA ? data.playerA.id : null);
+                        pvpState.callback = teleportCallback;
+                        console.log("[GamePatches] [DEBUG] Populated pvpState variables:", {
+                            playerA: pvpState.playerA,
+                            playerB: pvpState.playerB,
+                            challengerID: pvpState.challengerID
+                        });
+                    } else {
+                        console.error("[GamePatches] [ERROR] Phaser game state 'PVP' is not defined!");
+                    }
+
+                    // Force trigger PVP loading state completion or state start
+                    if (game.state.current === "PVPloading" && pvpLoadingState && typeof pvpLoadingState.completed === "function") {
+                        try {
+                            console.log("[GamePatches] [DEBUG] Calling pvpLoadingState.completed()...");
+                            pvpLoadingState.completed();
+                        } catch (e) {
+                            console.warn("[GamePatches] [WARN] pvpLoadingState.completed thrown error, triggering state start directly:", e);
+                            game.state.start("PVP");
+                        }
+                    } else if (game.state.current !== "PVP") {
+                        console.log(`[GamePatches] [DEBUG] Forcing state transition to 'PVP' from '${game.state.current}'`);
+                        game.state.start("PVP");
+                    }
+
+                    // Directly issue request_data and request_init triggers to move PVP._state forward
+                    setTimeout(() => {
+                        console.log(`[GamePatches] [DEBUG] Post-transition state check: '${game.state.current}'`);
+                        if (game.state.current === "PVP" && pvpState) {
+                            if (typeof pvpState.onMessage === "function") {
+                                console.log("[GamePatches] [DEBUG] Dispatching synthetic 'request_data' message to pvpState...");
+                                pvpState.onMessage({
+                                    action: "request_data",
+                                    data: {}
+                                });
+                            } else {
+                                console.error("[GamePatches] [ERROR] pvpState.onMessage handler function is missing!");
+                            }
+                        } else {
+                            console.warn("[GamePatches] [WARN] Game engine failed to enter 'PVP' state on time!");
+                        }
+                    }, 250);
+                }
+            };
+
+            socket.once("startPVP", startBattleHandler);
+
+            // Directly invoke handler if match is active
+            if (data && data.status === "active") {
+                console.log("[GamePatches] [DEBUG] Match response indicates status 'active'. Directly invoking startBattleHandler...");
+                startBattleHandler(data);
+            }
+
+            // Route incoming socket messages directly into current PVP state instance
+            socket.on("message", (msg) => {
+                if (!msg) return;
+
+                console.log("[GamePatches] [DEBUG] Socket message received:", msg);
+
+                if (msg.action === "startPVP" || (msg.data && msg.data.action === "startPVP")) {
+                    console.log("[GamePatches] [DEBUG] Encapsulated 'startPVP' action detected in socket message!");
+                    startBattleHandler(msg.data || msg);
+                }
+
+                // Forward network actions to active PVP screen state machine
+                if (game && game.state && game.state.states && game.state.states.PVP) {
+                    const activePVP = game.state.states.PVP;
+                    if (game.state.current === "PVP" && typeof activePVP.onMessage === "function") {
+                        console.log(`[GamePatches] [DEBUG] Forwarding action '${msg.action || (msg.data && msg.data.action)}' to PVP state`);
+                        activePVP.onMessage(msg.data || msg);
+                    }
+                }
+            });
+        }
 
         if (prodigy.network && typeof prodigy.network.syncPlayer === "function") {
             setTimeout(
@@ -409,6 +625,63 @@ class GamePatches {
                 true
             );
         }
+
+        // Simulate Bot Network Handshake so PVP state machine transitions out of request_data / request_init
+        const triggerBotHandshake = () => {
+            console.log("[GamePatches] [DEBUG] Executing simulated bot network handshake...");
+            if (game && game.state && game.state.states) {
+                const pvpState = game.state.states.PVP;
+                const pvpLoadingState = game.state.states.PVPloading;
+
+                // Pre-populate PVP state properties required by Prodigy's PVP engine
+                if (pvpState) {
+                    pvpState.playerA = prodigy.player;
+                    pvpState.playerB = botPlayer;
+                    pvpState.teamA = (prodigy.player && typeof prodigy.player.getTeam === "function") ? prodigy.player.getTeam() : [prodigy.player];
+                    pvpState.teamB = (botPlayer && typeof botPlayer.getTeam === "function") ? botPlayer.getTeam() : [botPlayer];
+                    pvpState.zoneName = "pvp";
+                    pvpState.challengerID = prodigy.player && prodigy.player.data ? prodigy.player.data.userID : "LOCAL_PLAYER";
+                    pvpState.callback = teleportCallback;
+                    pvpState.isBotMatch = true;
+                }
+
+                // Force completion on PVPloading state or perform explicit state transition
+                if (game.state.current === "PVPloading") {
+                    console.log("[GamePatches] [DEBUG] Active state is PVPloading. Invoking completion handlers...");
+                    if (pvpLoadingState && typeof pvpLoadingState.completed === "function") {
+                        try {
+                            pvpLoadingState.completed();
+                        } catch (e) {
+                            console.warn("[GamePatches] [WARN] Error in pvpLoadingState.completed(), forcing state 'PVP':", e);
+                            game.state.start("PVP");
+                        }
+                    } else {
+                        game.state.start("PVP");
+                    }
+                } else if (game.state.current !== "PVP") {
+                    console.log(`[GamePatches] [DEBUG] Bot Match: Transitioning state from '${game.state.current}' to 'PVP'...`);
+                    game.state.start("PVP");
+                }
+
+                // Dispatch synthetic data/init message loop to step PVP state machine to active combat
+                const sendBotMessages = () => {
+                    if (game.state.current === "PVP" && pvpState && typeof pvpState.onMessage === "function") {
+                        console.log("[GamePatches] [DEBUG] Bot Match: Sending synthetic handshakes (request_data, data, request_init, init)...");
+                        pvpState.onMessage({ action: "request_data", data: {} });
+                        pvpState.onMessage({ action: "data", data: botData });
+                        pvpState.onMessage({ action: "request_init", data: {} });
+                        pvpState.onMessage({ action: "init", data: {} });
+                    }
+                };
+
+                setTimeout(sendBotMessages, 100);
+            } else {
+                console.error("[GamePatches] [ERROR] Bot Match: Phaser game states or PVP state instance not found!");
+            }
+        };
+
+        setTimeout(triggerBotHandshake, 300);
+        setTimeout(triggerBotHandshake, 1000);
 
         if (prodigy.message && typeof prodigy.message.closeMessage === "function") {
             prodigy.message.closeMessage(
