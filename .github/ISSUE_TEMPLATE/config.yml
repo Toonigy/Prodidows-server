@@ -1,0 +1,77 @@
+============================================================================
+
+GitHub Repository & Workflow Configuration (.github/config.yml)
+
+============================================================================
+
+version: 1
+
+----------------------------------------------------------------------------
+
+Repository Metadata & Default Rules
+
+----------------------------------------------------------------------------
+
+repository:
+name: prodigy-game-server
+description: "Legacy Prodigy Game (v1.50.0) Multiplayer & REST API Server"
+topics:
+- prodigy-game
+- socket-io
+- nodejs
+- multiplayer-game-server
+- firebase
+
+----------------------------------------------------------------------------
+
+Issue & Pull Request Templates / Automation Settings
+
+----------------------------------------------------------------------------
+
+issues:
+auto_assign: true
+default_labels:
+- "triage"
+- "needs-review"
+close_on_merge: true
+
+pull_requests:
+require_review: true
+auto_merge: false
+default_labels:
+- "enhancement"
+
+----------------------------------------------------------------------------
+
+Stale Bot Configuration (Manages Inactive Issues & PRs)
+
+----------------------------------------------------------------------------
+
+stale:
+daysUntilStale: 60
+daysUntilClose: 7
+staleLabel: "stale"
+markComment: >
+This issue/PR has been automatically marked as stale because it has not had
+recent activity. It will be closed in 7 days if no further activity occurs.
+closeComment: >
+Closing this issue/PR due to prolonged inactivity. Feel free to reopen if this is still relevant!
+exemptLabels:
+- "pinned"
+- "security"
+- "in-progress"
+
+----------------------------------------------------------------------------
+
+CI / CD Pipeline Triggers Configuration
+
+----------------------------------------------------------------------------
+
+ci:
+node_version: "18.x"
+test_command: "npm test"
+lint_command: "npm run lint"
+branches:
+- main
+- master
+- dev
